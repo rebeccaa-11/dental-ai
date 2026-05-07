@@ -1,0 +1,600 @@
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+}
+
+.start-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.hero-title {
+  color: white;
+  font-size: 28px;
+  font-weight: bold;
+  margin: 0;
+  margin-bottom: 5px;
+}
+
+.hero-sub {
+  color: #d1d5db;
+  font-size: 14px;
+  margin-top: 5px;
+}
+
+.start-content {
+  display: flex;
+  flex-direction: column;   
+  align-items: center;      
+  gap: 15px;                
+}
+/* LAYOUT */
+.container.full {
+  display: block;
+}
+
+.container.split {
+  display: flex;
+  height: 100vh;
+  font-family: Arial;
+}
+
+/* IMAGE */
+.image-section {
+  position: relative;
+  background:transparent;
+  width: 100%;
+  height: 100vh;
+}
+
+.container.split .image-section {
+  flex:3;
+}
+
+.xray-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* START SCREEN */
+.start-screen {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* TOP */
+.top-bar {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+}
+
+/* DOT */
+.dot {
+  position: absolute;
+  width: 25px;
+  height: 25px;
+  background: #34d399;
+  border-radius: 50%;
+  box-shadow: 0 0 0 8px rgba(52,211,153,0.2);
+  cursor: pointer;
+}
+
+.dot.active {
+  background: red;
+}
+
+/* ADD BOX */
+/* BOX */
+.add-box {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(6px);
+
+  padding: 12px;
+  border-radius: 12px;
+  width: 180px;
+
+  box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  transform: translate(-50%, -120%); /* 👈 keeps box above click */
+  animation: fadeIn 0.2s ease;
+}
+
+/* INPUT */
+.add-input {
+  width: 100%;
+  padding: 8px 4px;
+
+  border-radius: 8px;
+  border: 1px solid #ddd;
+
+  font-size: 13px;
+  outline: none;
+  transition: 0.2s;
+}
+
+.add-input:focus {
+  border-color: #34d399;
+  box-shadow: 0 0 0 2px rgba(52,211,153,0.2);
+}
+
+/* ACTIONS */
+.add-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* SAVE */
+.save-btn {
+  flex: 1;
+  background: #34d399;
+  color: white;
+  border: none;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: 0.2s;
+}
+
+.save-btn:hover {
+  background: #059669;
+}
+
+/* CANCEL */
+.cancel-btn {
+  flex: 1;
+  background: #f3f4f6;
+  border: none;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.cancel-btn:hover {
+  background: #e5e7eb;
+}
+
+/* ANIMATION */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -110%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -120%) scale(1);
+  }
+}
+
+/* PANEL */
+.panel {
+  flex: 1;
+  background: #f8fafc;
+  padding: 25px;
+  overflow-y: auto;
+}
+
+/* TITLE */
+.panel-title {
+  font-size: 22px;
+  font-weight: bold;
+  margin-bottom: 20px;
+}
+
+.panel-title span {
+  font-size: 14px;
+  color: rgb(0, 0, 0);
+}
+
+/* CARD */
+.card {
+  background: white;
+  padding: 15px;
+  margin-bottom: 15px;
+  border-radius: 12px;
+
+  cursor: pointer;
+  transition: all 0.25s ease;
+
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  position: relative;
+}
+
+/* HOVER */
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+}
+
+/* SELECTED */
+.card.selected {
+  border: 2px solid #34d399;
+  background: #ecfdf5;
+}
+
+/* HEADER */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* TITLE */
+.card h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+/* DESCRIPTION */
+.desc {
+  font-size: 13px;
+  color:black ;
+  margin-top: 5px;
+}
+
+/* BADGE */
+.badge {
+  background: #34d399;
+  color: white;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+/* ACTIONS */
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+/* EDIT */
+.edit-btn {
+  flex: 1;
+  background:#34d399;
+  color: white;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* DELETE */
+.delete-btn {
+  flex: 1;
+  background: #3b8e70;
+  color: white;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* MODAL */
+/* OVERLAY */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+/* MODAL BOX */
+.modal-content {
+  background: #ffffff;
+  padding: 25px;
+  border-radius: 16px;
+  width: 320px;
+
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+  text-align: center;
+
+  animation: popIn 0.2s ease;
+}
+
+/* TITLE */
+.modal-title {
+  margin-bottom: 15px;
+  font-size: 20px;
+  font-weight: bold;
+  color: #374151;
+}
+
+/* INPUT */
+.modal-input {
+  width: 100%;
+  padding: 10px;
+
+  border-radius: 10px;
+  border: 1px solid #ddd;
+
+  font-size: 14px;
+  outline: none;
+  transition: 0.2s;
+}
+
+.modal-input:focus {
+  border-color: #34d399;
+  box-shadow: 0 0 0 3px rgba(52,211,153,0.2);
+}
+
+/* ACTIONS */
+.modal-actions {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+}
+
+/* SAVE BUTTON */
+.save-btn {
+  flex: 2;
+  background: linear-gradient(135deg, #34d399, #059669);
+  color: white;
+  border: none;
+  padding: 10px;
+  border-radius: 10px;
+
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.save-btn:hover {
+  transform: translateY(-2px);
+}
+
+/* CANCEL BUTTON */
+.cancel-btn {
+  flex: 1;
+  background: #f3f4f6;
+  border: none;
+  padding: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.cancel-btn:hover {
+  background: #e5e7eb;
+}
+
+/* ANIMATIONS */
+@keyframes fadeIn {
+  from { opacity: 0 }
+  to { opacity: 1 }
+}
+
+@keyframes popIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+/* BACKGROUND WRAPPER */
+.bg-wrapper {
+  position: relative;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* BACKGROUND IMAGE */
+.bg-wrapper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background: url("/5.JPG") center/cover no-repeat; 
+  z-index: 0;
+}
+
+
+.bg-wrapper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.2); 
+  z-index: 1;
+}
+
+/* CONTENT */
+.container {
+  position: relative;
+  z-index: 2;
+  height: 100vh; 
+}
+
+/* UPLOAD BUTTON */
+.upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  width: 160px;
+  height: 45px;
+
+  background: #15ccbe;
+  border: none;
+  border-radius: 8px;
+
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+
+  cursor: pointer;
+  overflow: hidden;
+  position: relative;
+
+  transition: all 0.3s ease;
+}
+
+/* ICON */
+.upload-icon {
+  width: 22px;
+  height: 22px;
+  transition: all 0.3s ease;
+}
+
+/* TEXT */
+.upload-text {
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+/*  HOVER EFFECT */
+.upload-btn:hover .upload-text {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+/* ICON MOVES */
+.upload-btn:hover .upload-icon {
+  transform: translateX(50px);
+}
+
+/* ANALYZE BUTTON */
+
+.Btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 45px;
+  height: 45px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: 0.3s;
+  box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);
+
+
+  background-color: #15ccbe;
+}
+
+/* ICON */
+.sign {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sign svg {
+  width: 18px;
+}
+
+.sign svg path {
+  fill: white;
+}
+
+/* TEXT */
+.text {
+  position: absolute;
+  right: 0;
+  width: 0;
+  opacity: 0;
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+  transition: 0.3s;
+}
+
+/* HOVER */
+.Btn:hover {
+  width: 140px;
+  border-radius: 40px;
+}
+
+.Btn:hover .sign {
+  width: 30%;
+  padding-left: 10px;
+}
+
+.Btn:hover .text {
+  opacity: 1;
+  width: 70%;
+  padding-right: 10px;
+}
+
+/* CLICK */
+.Btn:active {
+  transform: translate(2px, 2px);
+}
+
+
+.report-btn {
+  cursor: pointer;
+  position: relative;
+  padding: 10px 24px;
+  font-size: 18px;
+  color: #34d399;
+  border: 2px solid #34d399;
+  border-radius: 34px;
+  background-color: transparent;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.320, 1);
+  overflow: hidden;
+  margin-top: 20px;
+}
+
+.report-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 50px;
+  height: 50px;
+  border-radius: inherit;
+  scale: 0;
+  z-index: -1;
+  background-color: #34d399;
+  transition: all 0.6s cubic-bezier(0.23, 1, 0.320, 1);
+}
+
+.report-btn:hover::before {
+  scale: 3;
+}
+
+.report-btn:hover {
+   background: #34d399;              
+  color: #212121;                 
+  transform: scale(1.05);        
+  box-shadow: 0 8px 20px rgba(52, 211, 153, 0.4); 
+}
+
+
+.report-btn:active {
+  scale: 1.1;
+}
+
+
