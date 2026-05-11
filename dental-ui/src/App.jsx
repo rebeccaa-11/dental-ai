@@ -6,6 +6,9 @@ export default function App() {
   const [imageFile, setImageFile] = useState(null);
   const [analyzed, setAnalyzed] = useState(false);
 
+  // 🔥 NEW (fix)
+  const [imageLoaded, setImageLoaded] = useState(false);
+
   const fileInputRef = useRef(null);
   const imageRef = useRef(null);
 
@@ -16,9 +19,9 @@ export default function App() {
   const [editOpen, setEditOpen] = useState(false);
   const [editValue, setEditValue] = useState("");
 
- 
+  // =========================
   // UPLOAD
- 
+  // =========================
   const handleUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -27,12 +30,13 @@ export default function App() {
       setAnalyzed(false);
       setSelected(null);
       setReport("");
+      setImageLoaded(false); // 🔥 reset
     }
   };
 
- 
+  // =========================
   // ANALYZE
- 
+  // =========================
   const handleAnalyze = async () => {
     if (!imageFile) return;
 
@@ -71,9 +75,9 @@ export default function App() {
     }
   };
 
- 
+  // =========================
   // EDIT / DELETE
- 
+  // =========================
   const editDetection = (id) => {
     const item = detections.find((d) => d.id === id);
     setSelected(item);
@@ -95,9 +99,9 @@ export default function App() {
     setSelected(null);
   };
 
- 
+  // =========================
   // REPORT
- 
+  // =========================
   const generateReport = () => {
     let text = "AI Diagnostic Report\n\n";
     detections.forEach((d, index) => {
@@ -125,7 +129,11 @@ export default function App() {
                   className="upload-btn"
                   onClick={() => fileInputRef.current.click()}
                 >
-                  Upload X-ray
+                  <svg className="upload-icon" viewBox="0 0 24 24">
+                    <path d="M12 16V4M12 4L7 9M12 4L17 9" stroke="white" strokeWidth="2"/>
+                    <path d="M4 20H20" stroke="white" strokeWidth="2"/>
+                  </svg>
+                  <span className="upload-text">Upload X-ray</span>
                 </button>
               </div>
 
@@ -156,17 +164,21 @@ export default function App() {
                 src={imageURL}
                 alt="xray"
                 className="xray-image"
+                onLoad={() => setImageLoaded(true)} // 🔥 FIX
               />
 
-              {/*  OVERLAY */}
-              {analyzed && imageRef.current && (
+              {/* OVERLAY */}
+              {analyzed && imageLoaded && imageRef.current && (
                 <svg className="overlay">
 
                   {detections.map((d) => {
                     const img = imageRef.current;
 
-                    const scaleX = img.clientWidth / img.naturalWidth;
-                    const scaleY = img.clientHeight / img.naturalHeight;
+                    // 🔥 FIX HERE (VERY IMPORTANT)
+                    const rect = img.getBoundingClientRect();
+
+                    const scaleX = rect.width / img.naturalWidth;
+                    const scaleY = rect.height / img.naturalHeight;
 
                     const x = d.x1 * scaleX;
                     const y = d.y1 * scaleY;
@@ -180,7 +192,6 @@ export default function App() {
                     return (
                       <g key={d.id} onClick={() => setSelected(d)}>
 
-                        {/* MASK */}
                         {points && (
                           <polygon
                             points={points}
@@ -188,7 +199,6 @@ export default function App() {
                           />
                         )}
 
-                        {/* BBOX */}
                         <rect
                           x={x}
                           y={y}
