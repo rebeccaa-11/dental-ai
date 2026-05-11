@@ -7,23 +7,18 @@ export default function App() {
   const [analyzed, setAnalyzed] = useState(false);
 
   const fileInputRef = useRef(null);
+  const imageRef = useRef(null);
 
   const [detections, setDetections] = useState([]);
   const [selected, setSelected] = useState(null);
   const [report, setReport] = useState("");
 
-  // MODAL
   const [editOpen, setEditOpen] = useState(false);
   const [editValue, setEditValue] = useState("");
 
-  // ADD NEW
-  const [adding, setAdding] = useState(false);
-  const [newNote, setNewNote] = useState("");
-  const [newPos, setNewPos] = useState({ x: 0, y: 0 });
-
-
+ 
   // UPLOAD
-  
+ 
   const handleUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -35,8 +30,8 @@ export default function App() {
     }
   };
 
-  
-  // ANALYZE 
+ 
+  // ANALYZE
  
   const handleAnalyze = async () => {
     if (!imageFile) return;
@@ -51,54 +46,34 @@ export default function App() {
       });
 
       const data = await res.json();
-      console.log("Backend response:", data);
+      console.log(data);
 
-      const formatted = data.detections.map((d, index) => ({
-        id: index + 1,
-        label: d.class_name,
-        x: d.bbox[0],
-        y: d.bbox[1],
-        confidence: d.confidence,
-      }));
+      const formatted = data.detections.map((d, index) => {
+        const [x1, y1, x2, y2] = d.bbox;
+
+        return {
+          id: index + 1,
+          label: d.class_name,
+          x1,
+          y1,
+          x2,
+          y2,
+          mask: d.mask,
+          confidence: d.confidence,
+        };
+      });
 
       setDetections(formatted);
       setAnalyzed(true);
 
     } catch (err) {
-      console.error("Error:", err);
+      console.error(err);
     }
   };
 
-  // CLICK IMAGE
-  const handleImageClick = (e) => {
-    if (!analyzed) return;
-
-    const rect = e.currentTarget.getBoundingClientRect();
-
-    setNewPos({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
-
-    setAdding(true);
-    setNewNote("");
-  };
-
-  const saveNewDetection = () => {
-    if (!newNote) return;
-
-    const newDetection = {
-      id: Date.now(),
-      label: newNote,
-      x: newPos.x,
-      y: newPos.y,
-    };
-
-    setDetections([...detections, newDetection]);
-    setAdding(false);
-  };
-
+ 
   // EDIT / DELETE
+ 
   const editDetection = (id) => {
     const item = detections.find((d) => d.id === id);
     setSelected(item);
@@ -120,7 +95,9 @@ export default function App() {
     setSelected(null);
   };
 
+ 
   // REPORT
+ 
   const generateReport = () => {
     let text = "AI Diagnostic Report\n\n";
     detections.forEach((d, index) => {
@@ -134,9 +111,8 @@ export default function App() {
       <div className={`container ${analyzed ? "split" : "full"}`}>
 
         {/* LEFT SIDE */}
-        <div className="image-section" onClick={handleImageClick}>
+        <div className="image-section">
 
-          {/* START SCREEN */}
           {!imageURL && (
             <div className="start-screen">
               <div className="start-content">
@@ -149,11 +125,7 @@ export default function App() {
                   className="upload-btn"
                   onClick={() => fileInputRef.current.click()}
                 >
-                  <svg className="upload-icon" viewBox="0 0 24 24">
-                    <path d="M12 16V4M12 4L7 9M12 4L17 9" stroke="white" strokeWidth="2"/>
-                    <path d="M4 20H20" stroke="white" strokeWidth="2"/>
-                  </svg>
-                  <span className="upload-text">Upload X-ray</span>
+                  Upload X-ray
                 </button>
               </div>
 
@@ -166,7 +138,6 @@ export default function App() {
             </div>
           )}
 
-          {/* IMAGE */}
           {imageURL && (
             <>
               <div className="top-bar">
@@ -180,20 +151,57 @@ export default function App() {
                 </button>
               </div>
 
-              <img src={imageURL} alt="xray" className="xray-image" />
+              <img
+                ref={imageRef}
+                src={imageURL}
+                alt="xray"
+                className="xray-image"
+              />
 
-              {/* TEMP DOTS */}
-              {analyzed && detections.map((d) => (
-                <div
-                  key={d.id}
-                  className={`dot ${selected?.id === d.id ? "active" : ""}`}
-                  style={{ left: d.x, top: d.y }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelected(d);
-                  }}
-                />
-              ))}
+              {/*  OVERLAY */}
+              {analyzed && imageRef.current && (
+                <svg className="overlay">
+
+                  {detections.map((d) => {
+                    const img = imageRef.current;
+
+                    const scaleX = img.clientWidth / img.naturalWidth;
+                    const scaleY = img.clientHeight / img.naturalHeight;
+
+                    const x = d.x1 * scaleX;
+                    const y = d.y1 * scaleY;
+                    const width = (d.x2 - d.x1) * scaleX;
+                    const height = (d.y2 - d.y1) * scaleY;
+
+                    const points = d.mask
+                      ?.map(([px, py]) => `${px * scaleX},${py * scaleY}`)
+                      .join(" ");
+
+                    return (
+                      <g key={d.id} onClick={() => setSelected(d)}>
+
+                        {/* MASK */}
+                        {points && (
+                          <polygon
+                            points={points}
+                            className={`mask ${selected?.id === d.id ? "active" : ""}`}
+                          />
+                        )}
+
+                        {/* BBOX */}
+                        <rect
+                          x={x}
+                          y={y}
+                          width={width}
+                          height={height}
+                          className={`bbox ${selected?.id === d.id ? "active" : ""}`}
+                        />
+                      </g>
+                    );
+                  })}
+
+                </svg>
+              )}
             </>
           )}
         </div>
@@ -201,9 +209,7 @@ export default function App() {
         {/* RIGHT PANEL */}
         {analyzed && (
           <div className="panel">
-            <h2 className="panel-title">
-              Findings <span>({detections.length})</span>
-            </h2>
+            <h2>Findings ({detections.length})</h2>
 
             {detections.map((d, index) => (
               <div
@@ -211,14 +217,9 @@ export default function App() {
                 className={`card ${selected?.id === d.id ? "selected" : ""}`}
                 onClick={() => setSelected(d)}
               >
-                <div className="card-header">
-                  <h3>🦷 {d.label}</h3>
-                  <span className="badge">{index + 1}</span>
-                </div>
-
-                <p className="desc">
-                  Confidence: {(d.confidence * 100).toFixed(1)}%
-                </p>
+                <h3>🦷 {d.label}</h3>
+                <p>Confidence: {(d.confidence * 100).toFixed(1)}%</p>
+                <div className="badge">{index + 1}</div>
               </div>
             ))}
 
@@ -243,23 +244,18 @@ export default function App() {
 
         {/* MODAL */}
         {editOpen && (
-          <div className="modal" onClick={() => setEditOpen(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h3 className="modal-title">Edit Label</h3>
+          <div className="modal">
+            <div className="modal-content">
+              <h3>Edit Label</h3>
 
               <input
-                className="modal-input"
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
               />
 
               <div className="modal-actions">
-                <button className="save-btn" onClick={saveEdit}>
-                  Save
-                </button>
-                <button className="cancel-btn" onClick={() => setEditOpen(false)}>
-                  Cancel
-                </button>
+                <button onClick={saveEdit}>Save</button>
+                <button onClick={() => setEditOpen(false)}>Cancel</button>
               </div>
             </div>
           </div>
