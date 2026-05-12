@@ -35,9 +35,7 @@ export default function App() {
       setImageLoaded(false);
     }
   };
-
- // ANALYZE
-// =========================
+  // =========================
   // ANALYZE
   // =========================
 const handleAnalyze = async () => {
@@ -197,7 +195,7 @@ const handleAnalyze = async () => {
                 className="xray-image"
                 onLoad={() => setImageLoaded(true)}
               />
-
+      
               {/* OVERLAY */}
               {analyzed && imageLoaded && imageRef.current && (
               <svg
