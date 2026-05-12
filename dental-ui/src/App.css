@@ -76,9 +76,14 @@ html, body, #root {
 /* TOP */
 .top-bar {
   position: absolute;
-  top: 10px;
-  left: 10px;
+  top: 88%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   z-index: 10;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 /* DOT */
@@ -499,6 +504,12 @@ html, body, #root {
 
 
   background-color: #15ccbe;
+}
+.analyze-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 20px;
 }
 
 /* ICON */
