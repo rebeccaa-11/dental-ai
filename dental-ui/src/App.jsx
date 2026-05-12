@@ -1,12 +1,12 @@
 import { useState, useRef } from "react";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import "./App.css";
 
 export default function App() {
   const [imageURL, setImageURL] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   const [analyzed, setAnalyzed] = useState(false);
-
-  // 🔥 NEW (fix)
   const [imageLoaded, setImageLoaded] = useState(false);
 
   const fileInputRef = useRef(null);
@@ -19,9 +19,11 @@ export default function App() {
   const [editOpen, setEditOpen] = useState(false);
   const [editValue, setEditValue] = useState("");
 
-  // =========================
+  // 🔥 NEW REPORT STATES
+  const [reportData, setReportData] = useState(null);
+  const [reportOpen, setReportOpen] = useState(false);
+
   // UPLOAD
-  // =========================
   const handleUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -30,54 +32,74 @@ export default function App() {
       setAnalyzed(false);
       setSelected(null);
       setReport("");
-      setImageLoaded(false); // 🔥 reset
+      setImageLoaded(false);
     }
   };
 
-  // =========================
-  // ANALYZE
-  // =========================
+ // ANALYZE
   const handleAnalyze = async () => {
     if (!imageFile) return;
 
     const formData = new FormData();
     formData.append("file", imageFile);
 
-    try {
-      const res = await fetch("http://127.0.0.1:8000/overlay-data", {
-        method: "POST",
-        body: formData,
-      });
+    const res = await fetch("http://127.0.0.1:8000/overlay-data", {
+      method: "POST",
+      body: formData,
+    });
 
-      const data = await res.json();
-      console.log(data);
+    const data = await res.json();
 
-      const formatted = data.detections.map((d, index) => {
-        const [x1, y1, x2, y2] = d.bbox;
+    const formatted = data.detections.map((d, index) => {
+      const [x1, y1, x2, y2] = d.bbox;
 
-        return {
-          id: index + 1,
-          label: d.class_name,
-          x1,
-          y1,
-          x2,
-          y2,
-          mask: d.mask,
-          confidence: d.confidence,
-        };
-      });
+      return {
+        id: index + 1,
+        label: d.class_name,
+        x1,
+        y1,
+        x2,
+        y2,
+        mask: d.mask,
+        confidence: d.confidence,
+      };
+    });
 
-      setDetections(formatted);
-      setAnalyzed(true);
-
-    } catch (err) {
-      console.error(err);
-    }
+    setDetections(formatted);
+    setAnalyzed(true);
   };
 
-  // =========================
+  // REPORT (UPDATED LOGIC)
+  const generateReport = async () => {
+    if (!imageFile) return;
+
+    const formData = new FormData();
+    formData.append("file", imageFile);
+
+    const res = await fetch("http://127.0.0.1:8000/generate-report", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await res.json();
+
+    setReportData(data);
+    setReportOpen(true);
+  };
+
+  // PDF DOWNLOAD
+  const downloadPDF = async () => {
+    const element = document.querySelector(".report-modal");
+
+    const canvas = await html2canvas(element);
+    const imgData = canvas.toDataURL("image/png");
+
+    const pdf = new jsPDF();
+    pdf.addImage(imgData, "PNG", 10, 10, 180, 0);
+    pdf.save("Dental_Report.pdf");
+  };
+
   // EDIT / DELETE
-  // =========================
   const editDetection = (id) => {
     const item = detections.find((d) => d.id === id);
     setSelected(item);
@@ -99,17 +121,6 @@ export default function App() {
     setSelected(null);
   };
 
-  // =========================
-  // REPORT
-  // =========================
-  const generateReport = () => {
-    let text = "AI Diagnostic Report\n\n";
-    detections.forEach((d, index) => {
-      text += `#${index + 1} - ${d.label} (${(d.confidence * 100).toFixed(1)}%)\n`;
-    });
-    setReport(text);
-  };
-
   return (
     <div className="bg-wrapper">
       <div className={`container ${analyzed ? "split" : "full"}`}>
@@ -129,7 +140,7 @@ export default function App() {
                   className="upload-btn"
                   onClick={() => fileInputRef.current.click()}
                 >
-                  <svg className="upload-icon" viewBox="0 0 24 24">
+                  <svg className="upload-icon" viewBox="0 0 24 24" fill="none">
                     <path d="M12 16V4M12 4L7 9M12 4L17 9" stroke="white" strokeWidth="2"/>
                     <path d="M4 20H20" stroke="white" strokeWidth="2"/>
                   </svg>
@@ -164,17 +175,14 @@ export default function App() {
                 src={imageURL}
                 alt="xray"
                 className="xray-image"
-                onLoad={() => setImageLoaded(true)} // 🔥 FIX
+                onLoad={() => setImageLoaded(true)}
               />
 
               {/* OVERLAY */}
               {analyzed && imageLoaded && imageRef.current && (
                 <svg className="overlay">
-
                   {detections.map((d) => {
                     const img = imageRef.current;
-
-                    // 🔥 FIX HERE (VERY IMPORTANT)
                     const rect = img.getBoundingClientRect();
 
                     const scaleX = rect.width / img.naturalWidth;
@@ -191,14 +199,12 @@ export default function App() {
 
                     return (
                       <g key={d.id} onClick={() => setSelected(d)}>
-
                         {points && (
                           <polygon
                             points={points}
                             className={`mask ${selected?.id === d.id ? "active" : ""}`}
                           />
                         )}
-
                         <rect
                           x={x}
                           y={y}
@@ -209,7 +215,6 @@ export default function App() {
                       </g>
                     );
                   })}
-
                 </svg>
               )}
             </>
@@ -243,30 +248,40 @@ export default function App() {
                 </button>
               </div>
             )}
-
             <button className="report-btn" onClick={generateReport}>
               Generate Report
             </button>
-
-            {report && <pre className="report">{report}</pre>}
           </div>
         )}
 
-        {/* MODAL */}
-        {editOpen && (
+        {/* REPORT MODAL */}
+        {reportOpen && reportData && (
           <div className="modal">
-            <div className="modal-content">
-              <h3>Edit Label</h3>
+            <div className="modal-content report-modal">
 
-              <input
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
+              <h2>{reportData.title}</h2>
+
+              <img
+                src={`http://127.0.0.1:8000/${reportData.image_url}`}
+                className="report-image"
               />
 
+              <h4>Diagnosis</h4>
+              <p>{reportData.diagnosis}</p>
+
+              <h4>Treatment Plan</h4>
+              <p>{reportData.treatment_plan}</p>
+
               <div className="modal-actions">
-                <button onClick={saveEdit}>Save</button>
-                <button onClick={() => setEditOpen(false)}>Cancel</button>
+                <button className="save-btn" onClick={downloadPDF}>
+                  Download PDF
+                </button>
+
+                <button onClick={() => setReportOpen(false)}>
+                  Close
+                </button>
               </div>
+
             </div>
           </div>
         )}
