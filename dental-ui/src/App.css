@@ -567,6 +567,19 @@ html, body, #root {
   margin-top: 20px;
 }
 
+.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.xray-image {
+  width: 100%;
+  height: auto;
+  display: block;
+}
 .report-btn::before {
   content: '';
   position: absolute;
@@ -636,7 +649,7 @@ html, body, #root {
 }
 
 
-/* ===== REPORT MODAL (NEW ONLY) ===== */
+/* REPORT MODAL NEW */
 
 .report-modal {
   max-height: 80vh;

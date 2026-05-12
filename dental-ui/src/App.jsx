@@ -37,37 +37,57 @@ export default function App() {
   };
 
  // ANALYZE
-  const handleAnalyze = async () => {
-    if (!imageFile) return;
+// =========================
+  // ANALYZE
+  // =========================
+const handleAnalyze = async () => {
+  if (!imageFile) return;
 
-    const formData = new FormData();
-    formData.append("file", imageFile);
+  const formData = new FormData();
+  formData.append("file", imageFile);
 
+  try {
     const res = await fetch("http://127.0.0.1:8000/overlay-data", {
       method: "POST",
       body: formData,
     });
 
+    if (!res.ok) {
+      throw new Error(`Server error: ${res.status}`);
+    }
+
     const data = await res.json();
+    console.log("FULL RESPONSE:", data);
+
+    if (!data?.detections) {
+      console.error("No detections found in response");
+      return;
+    }
 
     const formatted = data.detections.map((d, index) => {
-      const [x1, y1, x2, y2] = d.bbox;
+      const bbox = d.bbox || [0, 0, 0, 0];
+
+      const [x1, y1, x2, y2] = bbox;
 
       return {
-        id: index + 1,
-        label: d.class_name,
+        id: d.anomaly_id ?? index + 1,
+        label: d.class_name || "Unknown",
+        confidence: d.confidence ?? 0,
         x1,
         y1,
         x2,
         y2,
-        mask: d.mask,
-        confidence: d.confidence,
+        mask: d.mask || null,
       };
     });
 
     setDetections(formatted);
     setAnalyzed(true);
-  };
+
+  } catch (err) {
+    console.error("Analyze failed:", err);
+  }
+};
 
   // REPORT (UPDATED LOGIC)
   const generateReport = async () => {
@@ -180,43 +200,29 @@ export default function App() {
 
               {/* OVERLAY */}
               {analyzed && imageLoaded && imageRef.current && (
-                <svg className="overlay">
-                  {detections.map((d) => {
-                    const img = imageRef.current;
-                    const rect = img.getBoundingClientRect();
+              <svg
+                  className="overlay"
+                  viewBox={`0 0 ${imageRef.current.naturalWidth} ${imageRef.current.naturalHeight}`}
+                  preserveAspectRatio="xMidYMid meet"
+              >
+                {detections.map((d) => (
+                  <g
+                    key={d.id}
+                    onClick={() => setSelected(d)}
+                    style={{ cursor: "pointer" }}
+                  >
 
-                    const scaleX = rect.width / img.naturalWidth;
-                    const scaleY = rect.height / img.naturalHeight;
+                    {d.mask && (
+                      <polygon
+                        points={d.mask.map(([x, y]) => `${x},${y}`).join(" ")}
+                        className={`mask ${selected?.id === d.id ? "active" : ""}`}
+                      />
+                    )}
 
-                    const x = d.x1 * scaleX;
-                    const y = d.y1 * scaleY;
-                    const width = (d.x2 - d.x1) * scaleX;
-                    const height = (d.y2 - d.y1) * scaleY;
-
-                    const points = d.mask
-                      ?.map(([px, py]) => `${px * scaleX},${py * scaleY}`)
-                      .join(" ");
-
-                    return (
-                      <g key={d.id} onClick={() => setSelected(d)}>
-                        {points && (
-                          <polygon
-                            points={points}
-                            className={`mask ${selected?.id === d.id ? "active" : ""}`}
-                          />
-                        )}
-                        <rect
-                          x={x}
-                          y={y}
-                          width={width}
-                          height={height}
-                          className={`bbox ${selected?.id === d.id ? "active" : ""}`}
-                        />
-                      </g>
-                    );
-                  })}
-                </svg>
-              )}
+                  </g>
+                ))}
+              </svg>
+            )}
             </>
           )}
         </div>
