@@ -19,6 +19,9 @@ export default function App() {
   const [editOpen, setEditOpen] = useState(false);
   const [editValue, setEditValue] = useState("");
 
+  //added this for report generation to link the image with the report
+  const [selectedImageId, setSelectedImageId] = useState(null);
+
   // 🔥 NEW REPORT STATES
   const [reportData, setReportData] = useState(null);
   const [reportOpen, setReportOpen] = useState(false);
@@ -82,25 +85,22 @@ const handleAnalyze = async () => {
     setDetections(formatted);
     setAnalyzed(true);
 
+    setSelectedImageId(data.image_id);
+
   } catch (err) {
     console.error("Analyze failed:", err);
   }
 };
 
   // REPORT (UPDATED LOGIC)
- const generateReport = async () => {
-  if (!imageFile) return;
+const generateReport = async () => {
+  if (!selectedImageId) {
+    console.error("No image_id set — run analyze first");
+    return;
+  }
 
   const payload = {
-    image_filename: imageFile.name,   // ✅ FIX HERE
-    detections: detections.map(d => ({
-      class_id: d.class_id,
-      class_name: d.label,
-      confidence: d.confidence,
-      bbox: [d.x1, d.y1, d.x2, d.y2],
-      mask: d.mask,
-      anomaly_id: d.id,
-    })),
+    image_id: selectedImageId,
   };
 
   const res = await fetch("http://127.0.0.1:8000/generate-report", {
@@ -112,6 +112,7 @@ const handleAnalyze = async () => {
   });
 
   const data = await res.json();
+
   setReportData(data);
   setReportOpen(true);
 };
@@ -277,7 +278,7 @@ const handleAnalyze = async () => {
               <h2>{reportData.title}</h2>
 
               <img
-                src={`http://127.0.0.1:8000/${reportData.image_url}`}
+                src={`http://127.0.0.1:8000${reportData.image_url}`}
                 className="report-image"
               />
 
