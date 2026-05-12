@@ -634,3 +634,30 @@ html, body, #root {
   fill: rgba(255, 0, 0, 0.25);
   stroke: red;
 }
+
+
+/* ===== REPORT MODAL (NEW ONLY) ===== */
+
+.report-modal {
+  max-height: 80vh;
+  overflow-y: auto;
+  text-align: left;
+}
+
+/* report image */
+.report-image {
+  width: 100%;
+  border-radius: 10px;
+  margin: 10px 0;
+}
+
+/* spacing for sections */
+.report-modal h4 {
+  margin-top: 15px;
+  margin-bottom: 5px;
+}
+
+/* optional: better paragraph spacing */
+.report-modal p {
+  line-height: 1.5;
+}
