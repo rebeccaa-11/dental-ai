@@ -88,22 +88,33 @@ const handleAnalyze = async () => {
 };
 
   // REPORT (UPDATED LOGIC)
-  const generateReport = async () => {
-    if (!imageFile) return;
+ const generateReport = async () => {
+  if (!imageFile) return;
 
-    const formData = new FormData();
-    formData.append("file", imageFile);
-
-    const res = await fetch("http://127.0.0.1:8000/generate-report", {
-      method: "POST",
-      body: formData,
-    });
-
-    const data = await res.json();
-
-    setReportData(data);
-    setReportOpen(true);
+  const payload = {
+    image_filename: imageFile.name,   // ✅ FIX HERE
+    detections: detections.map(d => ({
+      class_id: d.class_id,
+      class_name: d.label,
+      confidence: d.confidence,
+      bbox: [d.x1, d.y1, d.x2, d.y2],
+      mask: d.mask,
+      anomaly_id: d.id,
+    })),
   };
+
+  const res = await fetch("http://127.0.0.1:8000/generate-report", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json();
+  setReportData(data);
+  setReportOpen(true);
+};
 
   // PDF DOWNLOAD
   const downloadPDF = async () => {
@@ -195,7 +206,7 @@ const handleAnalyze = async () => {
                 className="xray-image"
                 onLoad={() => setImageLoaded(true)}
               />
-      
+
               {/* OVERLAY */}
               {analyzed && imageLoaded && imageRef.current && (
               <svg
