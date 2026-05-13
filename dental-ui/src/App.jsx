@@ -4,12 +4,11 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import "./App.css";
 
-// Convert screen-space coords (relative to img element) → natural image coords
-const toNatural = (sx, sy, img) => {
-  const rect = img.getBoundingClientRect();
+// Convert screen-space coords (relative to SVG element) → natural image coords
+const toNatural = (sx, sy, svgRect, img) => {
   return [
-    (sx / rect.width)  * img.naturalWidth,
-    (sy / rect.height) * img.naturalHeight,
+    (sx / svgRect.width)  * img.naturalWidth,
+    (sy / svgRect.height) * img.naturalHeight,
   ];
 };
 
@@ -20,6 +19,7 @@ export default function App() {
   const [imageFile,   setImageFile]   = useState(null);
   const [analyzed,    setAnalyzed]    = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [analyzing,   setAnalyzing]   = useState(false);
 
   const fileInputRef = useRef(null);
   const imageRef     = useRef(null);
@@ -27,14 +27,15 @@ export default function App() {
   const [detections, setDetections] = useState([]);
   const [selected,   setSelected]   = useState(null);
 
-  const [reportData, setReportData] = useState(null);
-  const [reportOpen, setReportOpen] = useState(false);
-
-  const [saveStatus, setSaveStatus] = useState(null); // null | 'saving' | 'saved' | 'error'
+  const [reportData,    setReportData]    = useState(null);
+  const [reportOpen,    setReportOpen]    = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
 
+  const [saveStatus, setSaveStatus] = useState(null);
+  const [hasSaved,   setHasSaved]   = useState(false);
+
   // ===== POLYGON DRAWING =====
-  const [naturalPts, setNaturalPts] = useState([]); // natural-image-space points
+  const [naturalPts, setNaturalPts] = useState([]);
   const [drawMode,   setDrawMode]   = useState(false);
   const [polyLabel,  setPolyLabel]  = useState("");
   const [labelOpen,  setLabelOpen]  = useState(false);
@@ -50,33 +51,39 @@ export default function App() {
     setDetections([]);
     setNaturalPts([]);
     setDrawMode(false);
+    setHasSaved(false);
   };
 
   // ================= ANALYZE =================
   const handleAnalyze = async () => {
+    setAnalyzing(true);
     const formData = new FormData();
     formData.append("file", imageFile);
-    const res  = await fetch("http://127.0.0.1:8000/overlay-data", { method: "POST", body: formData });
-    const data = await res.json();
-    setImageId(data.image_id);
-    setDetections(
-      data.detections.map((d, i) => ({
-        id:         i + 1,
-        class_id:   d.class_id,
-        class_name: d.class_name,
-        confidence: d.confidence,
-        bbox:       d.bbox,
-        mask:       d.mask,
-        is_valid:   true,
-        isManual:   false,
-      }))
-    );
-    setAnalyzed(true);
+    try {
+      const res  = await fetch("http://127.0.0.1:8000/overlay-data", { method: "POST", body: formData });
+      const data = await res.json();
+      setImageId(data.image_id);
+      setDetections(
+        data.detections.map((d, i) => ({
+          id:         i + 1,
+          class_id:   d.class_id,
+          class_name: d.class_name,
+          confidence: d.confidence,
+          bbox:       d.bbox,
+          mask:       d.mask,
+          is_valid:   true,
+          isManual:   false,
+        }))
+      );
+      setAnalyzed(true);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   // ================= SAVE =================
-  // All detections — both AI and manual — are included.
-  // Manual polygons have class_id: 0 and bbox: [0,0,0,0] to satisfy FastAPI validation.
   const saveAllAnnotations = async () => {
     setSaveStatus("saving");
     const payload = {
@@ -99,6 +106,7 @@ export default function App() {
       });
       await res.json();
       setSaveStatus("saved");
+      setHasSaved(true);
       setTimeout(() => setSaveStatus(null), 2500);
     } catch (err) {
       console.error(err);
@@ -108,57 +116,50 @@ export default function App() {
   };
 
   // ================= REPORT =================
-const generateReport = async () => {
-  setReportLoading(true);
-  try {
-    const res = await fetch("http://127.0.0.1:8000/generate-report", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image_id: imageId }),
-    });
-    const data = await res.json();
-    setReportData(data);
-    setReportOpen(true);
-  } catch (err) {
-    console.error(err);
-  } finally {
-    setReportLoading(false);
-  }
-};
+  const generateReport = async () => {
+    setReportLoading(true);
+    try {
+      const res = await fetch("http://127.0.0.1:8000/generate-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_id: imageId }),
+      });
+      const data = await res.json();
+      setReportData(data);
+      setReportOpen(true);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
-const downloadPDF = async () => {
+  const downloadPDF = async () => {
     const pdf    = new jsPDF({ unit: "mm", format: "a4" });
     const W      = 210;
     const margin = 20;
     const usable = W - margin * 2;
     let   y      = margin;
 
-    // ── WHITE BACKGROUND ─────────────────────────────────
     pdf.setFillColor(255, 255, 255);
     pdf.rect(0, 0, 210, 297, "F");
 
-    // ── HEADER BAR ───────────────────────────────────────
     pdf.setFillColor(15, 40, 25);
     pdf.rect(0, 0, 210, 28, "F");
-
     pdf.setFontSize(16);
     pdf.setFont("helvetica", "bold");
     pdf.setTextColor(52, 211, 153);
     pdf.text("Dental X-ray Analysis Report", margin, 12);
-
     pdf.setFontSize(9);
     pdf.setFont("helvetica", "normal");
     pdf.setTextColor(180, 220, 200);
     pdf.text("Generated: " + new Date().toLocaleDateString("en-GB", { year:"numeric", month:"long", day:"numeric" }), margin, 20);
     pdf.text("AI-Assisted Dental Diagnostic System", W - margin, 20, { align: "right" });
-
     y = 36;
 
-    // ── X-RAY IMAGE ──────────────────────────────────────
     try {
       const imgEl  = document.querySelector(".report-image");
       const imgSrc = imgEl.src;
-      // Fetch as blob to bypass cross-origin canvas taint restriction
       const blob    = await fetch(imgSrc).then(r => r.blob());
       const imgData = await new Promise((resolve) => {
         const reader = new FileReader();
@@ -168,7 +169,6 @@ const downloadPDF = async () => {
       const imgH = Math.round((imgEl.naturalHeight / imgEl.naturalWidth) * usable);
       pdf.addImage(imgData, "JPEG", margin, y, usable, imgH);
       y += imgH + 6;
-
       pdf.setFontSize(8);
       pdf.setFont("helvetica", "italic");
       pdf.setTextColor(120, 120, 120);
@@ -179,19 +179,16 @@ const downloadPDF = async () => {
       y += 4;
     }
 
-    // ── DIVIDER ──────────────────────────────────────────
     pdf.setDrawColor("#dddddd");
     pdf.setLineWidth(0.3);
     pdf.line(margin, y, W - margin, y);
     y += 5;
 
-    // ── FINDINGS TABLE ───────────────────────────────────
     pdf.setFontSize(11);
     pdf.setFont("helvetica", "bold");
     pdf.setTextColor(15, 40, 25);
     pdf.text("DETECTED FINDINGS", margin, y);
     y += 6;
-
     pdf.setFillColor(240, 248, 244);
     pdf.rect(margin, y - 4, usable, 8, "F");
     pdf.setFontSize(9);
@@ -202,7 +199,6 @@ const downloadPDF = async () => {
     pdf.text("Confidence", margin + 90,  y);
     pdf.text("Type",       margin + 130, y);
     y += 5;
-
     pdf.setDrawColor("#cccccc");
     pdf.line(margin, y, W - margin, y);
     y += 4;
@@ -228,7 +224,6 @@ const downloadPDF = async () => {
     pdf.line(margin, y, W - margin, y);
     y += 5;
 
-    // ── DIAGNOSIS ────────────────────────────────────────
     if (reportData?.diagnosis) {
       pdf.setFontSize(11);
       pdf.setFont("helvetica", "bold");
@@ -247,7 +242,6 @@ const downloadPDF = async () => {
     pdf.line(margin, y, W - margin, y);
     y += 5;
 
-    // ── TREATMENT PLAN ───────────────────────────────────
     if (reportData?.treatment_plan) {
       pdf.setFontSize(11);
       pdf.setFont("helvetica", "bold");
@@ -261,7 +255,6 @@ const downloadPDF = async () => {
       pdf.text(planLines, margin, y);
     }
 
-    // ── FOOTER ───────────────────────────────────────────
     pdf.setFillColor(15, 40, 25);
     pdf.rect(0, 282, 210, 15, "F");
     pdf.setFontSize(8);
@@ -274,25 +267,56 @@ const downloadPDF = async () => {
   };
 
   // ================= POLYGON DRAW =================
+  // FIX: use e.currentTarget (the SVG) for the rect, not the img
+  // This ensures coordinates are always aligned regardless of layout
   const handleSvgClick = useCallback((e) => {
-    if (!drawMode || !imageRef.current) return;
-    e.stopPropagation();
-    const img  = imageRef.current;
-    const rect = img.getBoundingClientRect();
-    const sx   = e.clientX - rect.left;
-    const sy   = e.clientY - rect.top;
-    setNaturalPts((prev) => [...prev, toNatural(sx, sy, img)]);
-  }, [drawMode]);
+  if (!drawMode || !imageRef.current) return;
+  e.stopPropagation();
+
+  const img     = imageRef.current;
+  const svg     = e.currentTarget;
+  const svgRect = svg.getBoundingClientRect();
+
+  const natW = img.naturalWidth;
+  const natH = img.naturalHeight;
+
+  // Compute how the image is letterboxed inside the SVG
+  const svgAspect = svgRect.width  / svgRect.height;
+  const imgAspect = natW / natH;
+
+  let renderW, renderH, offsetX, offsetY;
+
+  if (imgAspect > svgAspect) {
+    // image is wider — pillarboxed top/bottom
+    renderW = svgRect.width;
+    renderH = svgRect.width / imgAspect;
+    offsetX = 0;
+    offsetY = (svgRect.height - renderH) / 2;
+  } else {
+    // image is taller — letterboxed left/right
+    renderH = svgRect.height;
+    renderW = svgRect.height * imgAspect;
+    offsetX = (svgRect.width - renderW) / 2;
+    offsetY = 0;
+  }
+
+  const sx = e.clientX - svgRect.left  - offsetX;
+  const sy = e.clientY - svgRect.top   - offsetY;
+
+  // clamp to image bounds
+  if (sx < 0 || sy < 0 || sx > renderW || sy > renderH) return;
+
+  const nx = (sx / renderW) * natW;
+  const ny = (sy / renderH) * natH;
+
+  setNaturalPts((prev) => [...prev, [nx, ny]]);
+}, [drawMode]);
 
   const finishPolygon = useCallback(() => {
     if (naturalPts.length < 3) return;
     setLabelOpen(true);
   }, [naturalPts]);
 
-  // When the dentist confirms the label:
-  // 1. Add to detections (shows in right panel immediately)
-  // 2. mask = naturalPts (natural image coords, matches what backend expects)
-  // 3. class_id = 0, bbox = [0,0,0,0] so FastAPI validation passes
   const savePolygon = () => {
     if (!polyLabel.trim() || naturalPts.length < 3) return;
     setDetections((prev) => [
@@ -303,7 +327,7 @@ const downloadPDF = async () => {
         class_name: polyLabel.trim(),
         confidence: null,
         bbox:       [0, 0, 0, 0],
-        mask:       naturalPts,   // <-- real drawn coords, sent in JSON on Save
+        mask:       naturalPts,
         is_valid:   true,
         isManual:   true,
       },
@@ -362,14 +386,16 @@ const downloadPDF = async () => {
           {imageURL && (
             <>
               <div className="top-bar">
-                <button className="Btn" onClick={handleAnalyze} disabled={analyzed}>
-                  <div className="sign">
-                    <svg viewBox="0 0 512 512">
-                      <path d="M256 32L96 192h96v128h128V192h96L256 32z"/>
-                    </svg>
-                  </div>
-                  <div className="text">{analyzed ? "Analyzed ✓" : "Analyze"}</div>
-                </button>
+                {!analyzed && (
+                  <button className="Btn" onClick={handleAnalyze} disabled={analyzing}>
+                    <div className="sign">
+                      <svg viewBox="0 0 512 512">
+                        <path d="M256 32L96 192h96v128h128V192h96L256 32z"/>
+                      </svg>
+                    </div>
+                    <div className="text">{analyzing ? "Analyzing…" : "Analyze"}</div>
+                  </button>
+                )}
 
                 {analyzed && (
                   <button
@@ -382,9 +408,36 @@ const downloadPDF = async () => {
                         <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
                       </svg>
                     </div>
-                    <div className="text">{drawMode ? "Cancel" : "Draw"}</div>
+                    <div className="text">{drawMode ? "Cancel" : "Annotate"}</div>
                   </button>
                 )}
+
+                <button
+                  className="Btn"
+                  onClick={() => {
+                    setImageURL(null);
+                    setImageFile(null);
+                    setAnalyzed(false);
+                    setImageLoaded(false);
+                    setDetections([]);
+                    setSelected(null);
+                    setNaturalPts([]);
+                    setDrawMode(false);
+                    setHasSaved(false);
+                    setSaveStatus(null);
+                    setReportData(null);
+                    setImageId(null);
+                    fileInputRef.current.click();
+                  }}
+                >
+                  <div className="sign">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+                      <line x1="12" y1="5" x2="12" y2="19"/>
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                  </div>
+                  <div className="text">New X-ray</div>
+                </button>
               </div>
 
               {/* Drawing instructions */}
@@ -412,6 +465,14 @@ const downloadPDF = async () => {
                   draggable={false}
                 />
 
+                {/* SCANNING ANIMATION */}
+                {analyzing && (
+                  <div className="scan-overlay">
+                    <div className="scan-line" />
+                    <div className="scan-text">Analyzing X-ray…</div>
+                  </div>
+                )}
+
                 {analyzed && imageLoaded && imageRef.current && (
                   <svg
                     className="overlay"
@@ -421,7 +482,6 @@ const downloadPDF = async () => {
                     onClick={handleSvgClick}
                     onDoubleClick={(e) => { e.stopPropagation(); finishPolygon(); }}
                   >
-                    {/* All detections (AI + manual) */}
                     {detections.map((d) => (
                       <g
                         key={d.id}
@@ -435,7 +495,6 @@ const downloadPDF = async () => {
                       </g>
                     ))}
 
-                    {/* Live drawing preview */}
                     {drawMode && naturalPts.length > 0 && (
                       <>
                         <polyline
@@ -481,24 +540,24 @@ const downloadPDF = async () => {
                 onClick={() => setSelected(d)}
                 style={{ cursor: "pointer" }}
               >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <h3>🦷 {d.class_name}</h3>
-                  {d.confidence != null && (
-                    <p>Confidence: {(d.confidence * 100).toFixed(1)}%</p>
-                  )}
-                  {d.isManual && <p><span className="tag-manual">manual</span></p>}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <h3>🦷 {d.class_name}</h3>
+                    {d.confidence != null && (
+                      <p>Confidence: {(d.confidence * 100).toFixed(1)}%</p>
+                    )}
+                    {d.isManual && <p><span className="tag-manual">manual</span></p>}
+                  </div>
+                  <button
+                    className="card-delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDetections(prev => prev.filter(x => x.id !== d.id));
+                      if (selected?.id === d.id) setSelected(null);
+                    }}
+                    title="Delete"
+                  >✕</button>
                 </div>
-                <button
-                  className="card-delete-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDetections(prev => prev.filter(x => x.id !== d.id));
-                    if (selected?.id === d.id) setSelected(null);
-                  }}
-                  title="Delete"
-                >✕</button>
-              </div>
               </div>
             ))}
 
@@ -513,13 +572,17 @@ const downloadPDF = async () => {
                 : "Save"}
             </button>
 
-            <button className="report-btn" onClick={generateReport} disabled={reportLoading}>
-              {reportLoading ? "Generating…" : "Generate Report"}
-            </button>
-            {reportLoading && (
-              <div className="report-loading-bar">
-                <div className="report-loading-fill" />
-              </div>
+            {hasSaved && (
+              <>
+                <button className="report-btn" onClick={generateReport} disabled={reportLoading}>
+                  {reportLoading ? "Generating…" : "Generate Report"}
+                </button>
+                {reportLoading && (
+                  <div className="report-loading-bar">
+                    <div className="report-loading-fill" />
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -544,8 +607,7 @@ const downloadPDF = async () => {
 
       </div>
 
-      {/* LABEL DIALOG — rendered via portal directly on document.body
-          so it's never clipped by the container's stacking context       */}
+      {/* LABEL DIALOG */}
       {labelOpen && createPortal(
         <div className="label-overlay">
           <div className="label-dialog">
