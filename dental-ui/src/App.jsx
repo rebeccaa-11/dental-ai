@@ -41,6 +41,7 @@ export default function App() {
     setPoints([]);
   };
 
+
   // ================= ANALYZE =================
   const handleAnalyze = async () => {
     const formData = new FormData();
@@ -67,6 +68,35 @@ export default function App() {
     setDetections(formatted);
     setAnalyzed(true);
   };
+  const saveAllAnnotations = async () => {
+  const payload = {
+    image_id: imageId,
+    annotations: detections.map(d => ({
+      class_id: d.class_id ?? null,
+      class_name: d.class_name,
+      confidence: d.confidence ?? null,
+      bbox: d.bbox ?? [],
+      mask: d.mask ?? [],
+      is_valid: d.is_valid !== false
+    }))
+  };
+
+  try {
+    const res = await fetch("http://127.0.0.1:8000/save-annotations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    console.log("Saved:", data);
+
+  } catch (err) {
+    console.error(err);
+  }
+};
 
   // ================= REPORT =================
   const generateReport = async () => {
@@ -123,35 +153,6 @@ export default function App() {
       p.y * scaleY,
     ]);
 
-    const saveAllAnnotations = async () => {
-  const payload = {
-    image_id: imageId,
-    annotations: detections.map(d => ({
-      class_id: d.class_id ?? null,
-      class_name: d.class_name,
-      confidence: d.confidence ?? null,
-      bbox: d.bbox ?? [],
-      mask: d.mask ?? [],
-      is_valid: d.is_valid !== false
-    }))
-  };
-
-  try {
-    const res = await fetch("http://127.0.0.1:8000/save-annotations", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await res.json();
-    console.log("Saved:", data);
-
-  } catch (err) {
-    console.error(err);
-  }
-};
    const newDetection = {
   id: Date.now(),
   class_id: null,
