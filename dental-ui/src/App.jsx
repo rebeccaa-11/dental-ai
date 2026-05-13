@@ -4,6 +4,8 @@ import html2canvas from "html2canvas";
 import "./App.css";
 
 export default function App() {
+
+  // ================= STATE =================
   const [imageURL, setImageURL] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   const [analyzed, setAnalyzed] = useState(false);
@@ -14,113 +16,105 @@ export default function App() {
 
   const [detections, setDetections] = useState([]);
   const [selected, setSelected] = useState(null);
-  const [report, setReport] = useState("");
 
   const [editOpen, setEditOpen] = useState(false);
   const [editValue, setEditValue] = useState("");
 
-  //added this for report generation to link the image with the report
-  const [selectedImageId, setSelectedImageId] = useState(null);
-
-  // 🔥 NEW REPORT STATES
   const [reportData, setReportData] = useState(null);
   const [reportOpen, setReportOpen] = useState(false);
 
-  // UPLOAD
+  // ===== POLYGON DRAWING =====
+  const [points, setPoints] = useState([]);
+  const [addingPoly, setAddingPoly] = useState(false);
+  const [polyLabel, setPolyLabel] = useState("");
+  const [imageId, setImageId] = useState(null);
+
+  // ================= UPLOAD =================
   const handleUpload = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setImageFile(file);
-      setImageURL(URL.createObjectURL(file));
-      setAnalyzed(false);
-      setSelected(null);
-      setReport("");
-      setImageLoaded(false);
-    }
+    if (!file) return;
+
+    setImageFile(file);
+    setImageURL(URL.createObjectURL(file));
+    setAnalyzed(false);
+    setDetections([]);
+    setPoints([]);
   };
-  // =========================
-  // ANALYZE
-  // =========================
-const handleAnalyze = async () => {
-  if (!imageFile) return;
 
-  const formData = new FormData();
-  formData.append("file", imageFile);
 
-  try {
+  // ================= ANALYZE =================
+  const handleAnalyze = async () => {
+    const formData = new FormData();
+    formData.append("file", imageFile);
+
     const res = await fetch("http://127.0.0.1:8000/overlay-data", {
       method: "POST",
       body: formData,
     });
 
-    if (!res.ok) {
-      throw new Error(`Server error: ${res.status}`);
-    }
-
     const data = await res.json();
-    console.log("FULL RESPONSE:", data);
+    setImageId(data.image_id);
 
-    if (!data?.detections) {
-      console.error("No detections found in response");
-      return;
-    }
-
-    const formatted = data.detections.map((d, index) => {
-      const bbox = d.bbox || [0, 0, 0, 0];
-
-      const [x1, y1, x2, y2] = bbox;
-
-      return {
-        id: d.anomaly_id ?? index + 1,
-        label: d.class_name || "Unknown",
-        confidence: d.confidence ?? 0,
-        x1,
-        y1,
-        x2,
-        y2,
-        mask: d.mask || null,
-      };
-    });
+   const formatted = data.detections.map((d, i) => ({
+  id: i + 1,
+  class_id: d.class_id,
+  class_name: d.class_name,
+  confidence: d.confidence,
+  bbox: d.bbox,
+  mask: d.mask,
+  is_valid: true
+}));
 
     setDetections(formatted);
     setAnalyzed(true);
-
-    setSelectedImageId(data.image_id);
-
-  } catch (err) {
-    console.error("Analyze failed:", err);
-  }
-};
-
-  // REPORT (UPDATED LOGIC)
-const generateReport = async () => {
-  if (!selectedImageId) {
-    console.error("No image_id set — run analyze first");
-    return;
-  }
-
+  };
+  const saveAllAnnotations = async () => {
   const payload = {
-    image_id: selectedImageId,
+    image_id: imageId,
+    annotations: detections.map(d => ({
+      class_id: d.class_id ?? null,
+      class_name: d.class_name,
+      confidence: d.confidence ?? null,
+      bbox: d.bbox ?? [],
+      mask: d.mask ?? [],
+      is_valid: d.is_valid !== false
+    }))
   };
 
-  const res = await fetch("http://127.0.0.1:8000/generate-report", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  try {
+    const res = await fetch("http://127.0.0.1:8000/save-annotations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
 
-  const data = await res.json();
+    const data = await res.json();
+    console.log("Saved:", data);
 
-  setReportData(data);
-  setReportOpen(true);
+  } catch (err) {
+    console.error(err);
+  }
 };
 
-  // PDF DOWNLOAD
+  // ================= REPORT =================
+  const generateReport = async () => {
+    const formData = new FormData();
+    formData.append("file", imageFile);
+
+    const res = await fetch("http://127.0.0.1:8000/generate-report", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await res.json();
+    setReportData(data);
+    setReportOpen(true);
+  };
+
   const downloadPDF = async () => {
     const element = document.querySelector(".report-modal");
-
     const canvas = await html2canvas(element);
     const imgData = canvas.toDataURL("image/png");
 
@@ -129,28 +123,55 @@ const generateReport = async () => {
     pdf.save("Dental_Report.pdf");
   };
 
-  // EDIT / DELETE
-  const editDetection = (id) => {
-    const item = detections.find((d) => d.id === id);
-    setSelected(item);
-    setEditValue(item.label);
-    setEditOpen(true);
+  // ================= POLYGON DRAW =================
+  const handleImageClick = (e) => {
+    if (!imageRef.current || !analyzed) return;
+
+    const rect = imageRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    setPoints((prev) => [...prev, { x, y }]);
   };
 
-  const saveEdit = () => {
-    setDetections(
-      detections.map((d) =>
-        d.id === selected.id ? { ...d, label: editValue } : d
-      )
-    );
-    setEditOpen(false);
+  const finishPolygon = () => {
+    if (points.length < 3) return;
+    setAddingPoly(true);
   };
 
-  const deleteDetection = (id) => {
-    setDetections(detections.filter((d) => d.id !== id));
-    setSelected(null);
+  const savePolygon = () => {
+    if (!polyLabel || points.length < 3) return;
+
+    const img = imageRef.current;
+    const rect = img.getBoundingClientRect();
+
+    const scaleX = img.naturalWidth / rect.width;
+    const scaleY = img.naturalHeight / rect.height;
+
+    const realMask = points.map((p) => [
+      p.x * scaleX,
+      p.y * scaleY,
+    ]);
+
+   const newDetection = {
+  id: Date.now(),
+  class_id: null,
+  class_name: polyLabel,
+  confidence: null, // 🔥 IMPORTANT
+  bbox: [],
+  mask: realMask,
+  is_valid: true
+};
+
+    setDetections([...detections, newDetection]);
+
+    // reset
+    setPoints([]);
+    setPolyLabel("");
+    setAddingPoly(false);
   };
 
+  // ================= UI =================
   return (
     <div className="bg-wrapper">
       <div className={`container ${analyzed ? "split" : "full"}`}>
@@ -158,6 +179,7 @@ const generateReport = async () => {
         {/* LEFT SIDE */}
         <div className="image-section">
 
+          {/* START SCREEN */}
           {!imageURL && (
             <div className="start-screen">
               <div className="start-content">
@@ -187,7 +209,8 @@ const generateReport = async () => {
             </div>
           )}
 
-          {imageURL && (
+          {/* IMAGE + ANALYZE */}
+{imageURL && (
             <>
               <div className="top-bar">
                 <button className="Btn" onClick={handleAnalyze}>
@@ -242,28 +265,16 @@ const generateReport = async () => {
           <div className="panel">
             <h2>Findings ({detections.length})</h2>
 
-            {detections.map((d, index) => (
-              <div
-                key={d.id}
-                className={`card ${selected?.id === d.id ? "selected" : ""}`}
-                onClick={() => setSelected(d)}
-              >
-                <h3>🦷 {d.label}</h3>
+            {detections.map((d) => (
+              <div key={d.id} className="card">
+                <h3>🦷 {d.class_name}</h3>
                 <p>Confidence: {(d.confidence * 100).toFixed(1)}%</p>
-                <div className="badge">{index + 1}</div>
               </div>
             ))}
+                <button onClick={saveAllAnnotations}>
+                        Save
+                </button>
 
-            {selected && (
-              <div className="actions">
-                <button className="edit-btn" onClick={() => editDetection(selected.id)}>
-                  Edit
-                </button>
-                <button className="delete-btn" onClick={() => deleteDetection(selected.id)}>
-                  Delete
-                </button>
-              </div>
-            )}
             <button className="report-btn" onClick={generateReport}>
               Generate Report
             </button>
@@ -278,7 +289,7 @@ const generateReport = async () => {
               <h2>{reportData.title}</h2>
 
               <img
-                src={`http://127.0.0.1:8000${reportData.image_url}`}
+                src={`http://127.0.0.1:8000/${reportData.image_url}`}
                 className="report-image"
               />
 
@@ -289,15 +300,27 @@ const generateReport = async () => {
               <p>{reportData.treatment_plan}</p>
 
               <div className="modal-actions">
-                <button className="save-btn" onClick={downloadPDF}>
-                  Download PDF
-                </button>
-
-                <button onClick={() => setReportOpen(false)}>
-                  Close
-                </button>
+                <button onClick={downloadPDF}>Download PDF</button>
+                <button onClick={() => setReportOpen(false)}>Close</button>
               </div>
 
+            </div>
+          </div>
+        )}
+
+        {/* POLYGON LABEL INPUT */}
+        {addingPoly && (
+          <div className="add-box">
+            <input
+              className="add-input"
+              value={polyLabel}
+              onChange={(e) => setPolyLabel(e.target.value)}
+              placeholder="e.g. Deep caries"
+            />
+
+            <div className="add-actions">
+              <button className="save-btn" onClick={savePolygon}>Save</button>
+              <button className="cancel-btn" onClick={() => setAddingPoly(false)}>Cancel</button>
             </div>
           </div>
         )}
