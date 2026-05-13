@@ -481,13 +481,24 @@ const downloadPDF = async () => {
                 onClick={() => setSelected(d)}
                 style={{ cursor: "pointer" }}
               >
-                <h3>
-                  🦷 {d.class_name}
-                  {d.isManual && <span className="tag-manual">manual</span>}
-                </h3>
-                {d.confidence != null && (
-                  <p>Confidence: {(d.confidence * 100).toFixed(1)}%</p>
-                )}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <h3>🦷 {d.class_name}</h3>
+                  {d.confidence != null && (
+                    <p>Confidence: {(d.confidence * 100).toFixed(1)}%</p>
+                  )}
+                  {d.isManual && <p><span className="tag-manual">manual</span></p>}
+                </div>
+                <button
+                  className="card-delete-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetections(prev => prev.filter(x => x.id !== d.id));
+                    if (selected?.id === d.id) setSelected(null);
+                  }}
+                  title="Delete"
+                >✕</button>
+              </div>
               </div>
             ))}
 
