@@ -27,6 +27,7 @@ export default function App() {
   const [points, setPoints] = useState([]);
   const [addingPoly, setAddingPoly] = useState(false);
   const [polyLabel, setPolyLabel] = useState("");
+  const [imageId, setImageId] = useState(null);
 
   // ================= UPLOAD =================
   const handleUpload = (e) => {
@@ -51,13 +52,17 @@ export default function App() {
     });
 
     const data = await res.json();
+    setImageId(data.image_id);
 
-    const formatted = data.detections.map((d, i) => ({
-      id: i + 1,
-      label: d.class_name,
-      confidence: d.confidence,
-      mask: d.mask,
-    }));
+   const formatted = data.detections.map((d, i) => ({
+  id: i + 1,
+  class_id: d.class_id,
+  class_name: d.class_name,
+  confidence: d.confidence,
+  bbox: d.bbox,
+  mask: d.mask,
+  is_valid: true
+}));
 
     setDetections(formatted);
     setAnalyzed(true);
@@ -118,13 +123,44 @@ export default function App() {
       p.y * scaleY,
     ]);
 
-    const newDetection = {
-      id: Date.now(),
-      label: polyLabel,
-      mask: realMask,
-      confidence: 1,
-      manual: true,
-    };
+    const saveAllAnnotations = async () => {
+  const payload = {
+    image_id: imageId,
+    annotations: detections.map(d => ({
+      class_id: d.class_id ?? null,
+      class_name: d.class_name,
+      confidence: d.confidence ?? null,
+      bbox: d.bbox ?? [],
+      mask: d.mask ?? [],
+      is_valid: d.is_valid !== false
+    }))
+  };
+
+  try {
+    const res = await fetch("http://127.0.0.1:8000/save-annotations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    console.log("Saved:", data);
+
+  } catch (err) {
+    console.error(err);
+  }
+};
+   const newDetection = {
+  id: Date.now(),
+  class_id: null,
+  class_name: polyLabel,
+  confidence: null, // 🔥 IMPORTANT
+  bbox: [],
+  mask: realMask,
+  is_valid: true
+};
 
     setDetections([...detections, newDetection]);
 
@@ -236,10 +272,13 @@ export default function App() {
 
             {detections.map((d) => (
               <div key={d.id} className="card">
-                <h3>🦷 {d.label}</h3>
+                <h3>🦷 {d.class_name}</h3>
                 <p>Confidence: {(d.confidence * 100).toFixed(1)}%</p>
               </div>
             ))}
+                <button onClick={saveAllAnnotations}>
+                        Save
+                </button>
 
             <button className="report-btn" onClick={generateReport}>
               Generate Report
