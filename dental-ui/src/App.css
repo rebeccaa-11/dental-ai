@@ -115,6 +115,62 @@ html, body, #root {
 }
 
 /* ═══════════════════════════════════════════
+   PDF PREVIEW
+═══════════════════════════════════════════ */
+.pdf-preview-box {
+  background: #1a1a1a;
+  border-radius: 16px;
+  overflow: hidden;
+  width: 80vw;
+  height: 90vh;
+  max-width: 960px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+}
+
+.pdf-iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+}
+
+.pdf-preview-actions {
+  display: flex;
+  gap: 10px;
+  padding: 14px 20px;
+  background: rgba(10, 20, 15, 0.95);
+  border-top: 1px solid rgba(52, 211, 153, 0.15);
+}
+
+.modal-actions-btn-primary {
+  flex: 1;
+  padding: 10px;
+  border-radius: 34px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: #34d399;
+  border: 2px solid #34d399;
+  transition: all 0.2s;
+}
+.modal-actions-btn-primary:hover { background: #34d399; color: #0a1a12; }
+
+.modal-actions-btn-secondary {
+  flex: 1;
+  padding: 10px;
+  border-radius: 34px;
+  font-size: 14px;
+  cursor: pointer;
+  background: transparent;
+  color: #718096;
+  border: 2px solid rgba(113,128,150,0.3);
+  transition: all 0.2s;
+}
+.modal-actions-btn-secondary:hover { border-color: #718096; color: #e2e8f0; }
+
+/* ═══════════════════════════════════════════
    UPLOAD BUTTON
 ═══════════════════════════════════════════ */
 .upload-btn {

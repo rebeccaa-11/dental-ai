@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import "./App.css";
 
 export default function App() {
@@ -21,18 +20,18 @@ export default function App() {
   const [selected,   setSelected]   = useState(null);
 
   const [reportData,    setReportData]    = useState(null);
-  const [reportOpen,    setReportOpen]    = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
+  const [pdfUrl,        setPdfUrl]        = useState(null);
 
   const [saveStatus, setSaveStatus] = useState(null);
   const [hasSaved,   setHasSaved]   = useState(false);
 
   // ===== ZOOM / PAN =====
-  const [zoom,     setZoom]     = useState(1);
-  const [pan,      setPan]      = useState({ x: 0, y: 0 });
+  const [zoom,      setZoom]      = useState(1);
+  const [pan,       setPan]       = useState({ x: 0, y: 0 });
   const [showMasks, setShowMasks] = useState(true);
-  const [panning,  setPanning]  = useState(false);
-  const panStart   = useRef(null);
+  const [panning,   setPanning]   = useState(false);
+  const panStart = useRef(null);
 
   // ===== POLYGON DRAWING =====
   const [naturalPts, setNaturalPts] = useState([]);
@@ -99,7 +98,6 @@ export default function App() {
         is_valid:   d.is_valid   !== false,
       })),
     };
-    console.log("Saving payload:", JSON.stringify(payload, null, 2));
     try {
       const res = await fetch("http://127.0.0.1:8000/save-annotations", {
         method:  "POST",
@@ -117,26 +115,8 @@ export default function App() {
     }
   };
 
-  // ================= REPORT =================
-  const generateReport = async () => {
-    setReportLoading(true);
-    try {
-      const res = await fetch("http://127.0.0.1:8000/generate-report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_id: imageId }),
-      });
-      const data = await res.json();
-      setReportData(data);
-      setReportOpen(true);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setReportLoading(false);
-    }
-  };
-
-  const downloadPDF = async () => {
+  // ================= BUILD PDF (shared) =================
+  const buildPDF = async (data) => {
     const pdf    = new jsPDF({ unit: "mm", format: "a4" });
     const W      = 210;
     const margin = 20;
@@ -165,11 +145,11 @@ export default function App() {
       }
     };
 
-    // ── WHITE BACKGROUND ─────────────────────────────────
+    // WHITE BACKGROUND
     pdf.setFillColor(255, 255, 255);
     pdf.rect(0, 0, 210, 297, "F");
 
-    // ── HEADER BAR ───────────────────────────────────────
+    // HEADER
     pdf.setFillColor(15, 40, 25);
     pdf.rect(0, 0, 210, 28, "F");
     pdf.setFontSize(16);
@@ -183,17 +163,18 @@ export default function App() {
     pdf.text("AI-Assisted Dental Diagnostic System", W - margin, 20, { align: "right" });
     y = 36;
 
-    // ── X-RAY IMAGE ──────────────────────────────────────
+    // X-RAY IMAGE
     try {
-      const imgEl  = document.querySelector(".report-image");
-      const imgSrc = imgEl.src;
+      const imgSrc  = `http://127.0.0.1:8000/${data.image_url.replace(/^\/+/, "")}`;
       const blob    = await fetch(imgSrc).then(r => r.blob());
       const imgData = await new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
         reader.readAsDataURL(blob);
       });
-      const imgH = Math.round((imgEl.naturalHeight / imgEl.naturalWidth) * usable);
+      const tmpImg = new Image();
+      await new Promise((resolve) => { tmpImg.onload = resolve; tmpImg.src = imgData; });
+      const imgH = Math.round((tmpImg.naturalHeight / tmpImg.naturalWidth) * usable);
       checkPageBreak(imgH + 14);
       pdf.addImage(imgData, "JPEG", margin, y, usable, imgH);
       y += imgH + 6;
@@ -207,14 +188,14 @@ export default function App() {
       y += 4;
     }
 
-    // ── DIVIDER ──────────────────────────────────────────
+    // DIVIDER
     checkPageBreak(10);
     pdf.setDrawColor("#dddddd");
     pdf.setLineWidth(0.3);
     pdf.line(margin, y, W - margin, y);
     y += 5;
 
-    // ── FINDINGS TABLE ───────────────────────────────────
+    // FINDINGS TABLE
     checkPageBreak(20);
     pdf.setFontSize(11);
     pdf.setFont("helvetica", "bold");
@@ -257,8 +238,8 @@ export default function App() {
     pdf.line(margin, y, W - margin, y);
     y += 5;
 
-    // ── DIAGNOSIS ────────────────────────────────────────
-    if (reportData?.diagnosis) {
+    // DIAGNOSIS
+    if (data?.diagnosis) {
       checkPageBreak(20);
       pdf.setFontSize(11);
       pdf.setFont("helvetica", "bold");
@@ -268,7 +249,7 @@ export default function App() {
       pdf.setFontSize(10);
       pdf.setFont("helvetica", "normal");
       pdf.setTextColor(40, 40, 40);
-      const diagLines = pdf.splitTextToSize(reportData.diagnosis, usable);
+      const diagLines = pdf.splitTextToSize(data.diagnosis, usable);
       diagLines.forEach((line) => {
         checkPageBreak(6);
         pdf.text(line, margin, y);
@@ -282,8 +263,8 @@ export default function App() {
     pdf.line(margin, y, W - margin, y);
     y += 5;
 
-    // ── TREATMENT PLAN ───────────────────────────────────
-    if (reportData?.treatment_plan) {
+    // TREATMENT PLAN
+    if (data?.treatment_plan) {
       checkPageBreak(20);
       pdf.setFontSize(11);
       pdf.setFont("helvetica", "bold");
@@ -293,7 +274,7 @@ export default function App() {
       pdf.setFontSize(10);
       pdf.setFont("helvetica", "normal");
       pdf.setTextColor(40, 40, 40);
-      const planLines = pdf.splitTextToSize(reportData.treatment_plan, usable);
+      const planLines = pdf.splitTextToSize(data.treatment_plan, usable);
       planLines.forEach((line) => {
         checkPageBreak(6);
         pdf.text(line, margin, y);
@@ -301,19 +282,46 @@ export default function App() {
       });
     }
 
-    // ── FOOTER on last page ───────────────────────────────
     addFooter();
+    return pdf;
+  };
 
+  // ================= REPORT =================
+  const generateReport = async () => {
+    setReportLoading(true);
+    try {
+      const res  = await fetch("http://127.0.0.1:8000/generate-report", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ image_id: imageId }),
+      });
+      const data = await res.json();
+      setReportData(data);
+
+      // Build PDF and show as preview
+      const pdf  = await buildPDF(data);
+      const blob = pdf.output("blob");
+      const url  = URL.createObjectURL(blob);
+      setPdfUrl(url);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const downloadPDF = async () => {
+    if (!reportData) return;
+    const pdf = await buildPDF(reportData);
     pdf.save("Dental_Report.pdf");
   };
 
-  // ================= ZOOM / PAN HANDLERS =================
-  const handleWheel = useCallback((e) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom(prev => Math.min(Math.max(prev * delta, 1), 6));
-  }, []);
+  const closePdfPreview = () => {
+    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    setPdfUrl(null);
+  };
 
+  // ================= ZOOM / PAN =================
   const handleMouseDown = useCallback((e) => {
     if (drawMode) return;
     setPanning(true);
@@ -321,26 +329,22 @@ export default function App() {
   }, [drawMode, pan]);
 
   const handleMouseMove = useCallback((e) => {
-  if (!panning || drawMode) return;
-  const wrap = wrapRef.current;
-  if (!wrap) return;
-
-  const wRect  = wrap.getBoundingClientRect();
-  const maxPanX = (wRect.width  * (zoom - 1)) / 2;
-  const maxPanY = (wRect.height * (zoom - 1)) / 2;
-
-  const newX = e.clientX - panStart.current.x;
-  const newY = e.clientY - panStart.current.y;
-
-  setPan({
-    x: Math.min(Math.max(newX, -maxPanX), maxPanX),
-    y: Math.min(Math.max(newY, -maxPanY), maxPanY),
-  });
+    if (!panning || drawMode) return;
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const wRect   = wrap.getBoundingClientRect();
+    const maxPanX = (wRect.width  * (zoom - 1)) / 2;
+    const maxPanY = (wRect.height * (zoom - 1)) / 2;
+    const newX    = e.clientX - panStart.current.x;
+    const newY    = e.clientY - panStart.current.y;
+    setPan({
+      x: Math.min(Math.max(newX, -maxPanX), maxPanX),
+      y: Math.min(Math.max(newY, -maxPanY), maxPanY),
+    });
   }, [panning, drawMode, zoom]);
 
   const handleMouseUp = useCallback(() => setPanning(false), []);
 
-  // Attach wheel with passive:false so we can preventDefault
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -362,15 +366,12 @@ export default function App() {
     const img     = imageRef.current;
     const svg     = e.currentTarget;
     const svgRect = svg.getBoundingClientRect();
-
-    const natW = img.naturalWidth;
-    const natH = img.naturalHeight;
-
-    const svgAspect = svgRect.width  / svgRect.height;
+    const natW    = img.naturalWidth;
+    const natH    = img.naturalHeight;
+    const svgAspect = svgRect.width / svgRect.height;
     const imgAspect = natW / natH;
 
     let renderW, renderH, offsetX, offsetY;
-
     if (imgAspect > svgAspect) {
       renderW = svgRect.width;
       renderH = svgRect.width / imgAspect;
@@ -383,15 +384,11 @@ export default function App() {
       offsetY = 0;
     }
 
-    const sx = e.clientX - svgRect.left  - offsetX;
-    const sy = e.clientY - svgRect.top   - offsetY;
-
+    const sx = e.clientX - svgRect.left - offsetX;
+    const sy = e.clientY - svgRect.top  - offsetY;
     if (sx < 0 || sy < 0 || sx > renderW || sy > renderH) return;
 
-    const nx = (sx / renderW) * natW;
-    const ny = (sy / renderH) * natH;
-
-    setNaturalPts((prev) => [...prev, [nx, ny]]);
+    setNaturalPts((prev) => [...prev, [(sx / renderW) * natW, (sy / renderH) * natH]]);
   }, [drawMode]);
 
   const finishPolygon = useCallback(() => {
@@ -519,7 +516,6 @@ export default function App() {
                   </button>
                 )}
 
-                {/* Reset zoom button — only shown when zoomed in */}
                 {zoom > 1 && (
                   <button className="Btn" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>
                     <div className="sign">
@@ -561,7 +557,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Drawing instructions */}
               {drawMode && (
                 <div className="draw-hint-bar">
                   <span>✏️ Click to place points</span>
@@ -575,14 +570,12 @@ export default function App() {
                 </div>
               )}
 
-              {/* Zoom hint */}
               {!drawMode && zoom === 1 && analyzed && (
                 <div className="draw-hint-bar" style={{ justifyContent: "center" }}>
                   <span>🔍 Scroll to zoom · Drag to pan</span>
                 </div>
               )}
 
-              {/* Image + overlay */}
               <div
                 className="xray-wrap"
                 ref={wrapRef}
@@ -595,7 +588,6 @@ export default function App() {
                   cursor: drawMode ? "crosshair" : panning ? "grabbing" : zoom > 1 ? "grab" : "default",
                 }}
               >
-                {/* Zoomable inner container */}
                 <div style={{
                   transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                   transformOrigin: "center center",
@@ -612,7 +604,6 @@ export default function App() {
                     draggable={false}
                   />
 
-                  {/* SCANNING ANIMATION */}
                   {analyzing && (
                     <div className="scan-overlay">
                       <div className="scan-line" />
@@ -672,7 +663,6 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Zoom level indicator */}
                 {zoom > 1 && (
                   <div className="zoom-badge">{Math.round(zoom * 100)}%</div>
                 )}
@@ -685,85 +675,86 @@ export default function App() {
         {analyzed && (
           <div className="panel">
             <h2>Findings ({detections.length})</h2>
-            
+
             <div className="finding-list">
-            {detections.map((d) => (
-              <div
-                key={d.id}
-                className={`card ${selected?.id === d.id ? "card--selected" : ""}`}
-                onClick={() => setSelected(d)}
-                style={{ cursor: "pointer" }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <h3>🦷 {d.class_name}</h3>
-                    {d.confidence != null && (
-                      <p>Confidence: {(d.confidence * 100).toFixed(1)}%</p>
-                    )}
-                    {d.isManual && <p><span className="tag-manual">manual</span></p>}
+              {detections.map((d) => (
+                <div
+                  key={d.id}
+                  className={`card ${selected?.id === d.id ? "card--selected" : ""}`}
+                  onClick={() => setSelected(d)}
+                  style={{ cursor: "pointer" }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <h3>🦷 {d.class_name}</h3>
+                      {d.confidence != null && (
+                        <p>Confidence: {(d.confidence * 100).toFixed(1)}%</p>
+                      )}
+                      {d.isManual && <p><span className="tag-manual">manual</span></p>}
+                    </div>
+                    <button
+                      className="card-delete-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetections(prev => prev.filter(x => x.id !== d.id));
+                        if (selected?.id === d.id) setSelected(null);
+                      }}
+                      title="Delete"
+                    >✕</button>
                   </div>
-                  <button
-                    className="card-delete-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDetections(prev => prev.filter(x => x.id !== d.id));
-                      if (selected?.id === d.id) setSelected(null);
-                    }}
-                    title="Delete"
-                  >✕</button>
                 </div>
-              </div>
-            ))}
+              ))}
             </div>
 
             <div className="panel-footer">
+              <button
+                className={`save-status-btn${saveStatus === "saved" ? " saved" : ""}${saveStatus === "error" ? " error" : ""}`}
+                onClick={saveAllAnnotations}
+                disabled={saveStatus === "saving"}
+              >
+                {saveStatus === "saving" ? "Saving…"
+                  : saveStatus === "saved" ? "Saved ✓"
+                  : saveStatus === "error"  ? "Error — retry"
+                  : "Save"}
+              </button>
 
-            <button
-              className={`save-status-btn${saveStatus === "saved" ? " saved" : ""}${saveStatus === "error" ? " error" : ""}`}
-              onClick={saveAllAnnotations}
-              disabled={saveStatus === "saving"}
-            >
-              {saveStatus === "saving" ? "Saving…"
-                : saveStatus === "saved" ? "Saved ✓"
-                : saveStatus === "error"  ? "Error — retry"
-                : "Save"}
-            </button>
-
-            {hasSaved && (
-              <>
-                <button className="report-btn" onClick={generateReport} disabled={reportLoading}>
-                  {reportLoading ? "Generating…" : "Generate Report"}
-                </button>
-                {reportLoading && (
-                  <div className="report-loading-bar">
-                    <div className="report-loading-fill" />
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-        )}
-
-        {/* REPORT MODAL */}
-        {reportOpen && reportData && (
-          <div className="modal">
-            <div className="modal-content report-modal">
-              <h2>{reportData.title}</h2>
-              <img src={`http://127.0.0.1:8000/${reportData.image_url.replace(/^\/+/, "")}`} className="report-image" alt="report"/>
-              <h4>Diagnosis</h4>
-              <p>{reportData.diagnosis}</p>
-              <h4>Treatment Plan</h4>
-              <p>{reportData.treatment_plan}</p>
-              <div className="modal-actions">
-                <button onClick={downloadPDF}>Download PDF</button>
-                <button onClick={() => setReportOpen(false)}>Close</button>
-              </div>
+              {hasSaved && (
+                <>
+                  <button className="report-btn" onClick={generateReport} disabled={reportLoading}>
+                    {reportLoading ? "Generating…" : "Generate Report"}
+                  </button>
+                  {reportLoading && (
+                    <div className="report-loading-bar">
+                      <div className="report-loading-fill" />
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}
-
       </div>
+
+      {/* PDF PREVIEW MODAL */}
+      {pdfUrl && (
+        <div className="modal">
+          <div className="pdf-preview-box">
+            <iframe
+              src={pdfUrl}
+              title="Report Preview"
+              className="pdf-iframe"
+            />
+            <div className="pdf-preview-actions">
+              <button className="modal-actions-btn-primary" onClick={downloadPDF}>
+                Download PDF
+              </button>
+              <button className="modal-actions-btn-secondary" onClick={closePdfPreview}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* LABEL DIALOG */}
       {labelOpen && createPortal(
