@@ -4,14 +4,6 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import "./App.css";
 
-// Convert screen-space coords (relative to SVG element) → natural image coords
-const toNatural = (sx, sy, svgRect, img) => {
-  return [
-    (sx / svgRect.width)  * img.naturalWidth,
-    (sy / svgRect.height) * img.naturalHeight,
-  ];
-};
-
 export default function App() {
 
   // ================= STATE =================
@@ -23,6 +15,7 @@ export default function App() {
 
   const fileInputRef = useRef(null);
   const imageRef     = useRef(null);
+  const wrapRef      = useRef(null);
 
   const [detections, setDetections] = useState([]);
   const [selected,   setSelected]   = useState(null);
@@ -33,6 +26,13 @@ export default function App() {
 
   const [saveStatus, setSaveStatus] = useState(null);
   const [hasSaved,   setHasSaved]   = useState(false);
+
+  // ===== ZOOM / PAN =====
+  const [zoom,     setZoom]     = useState(1);
+  const [pan,      setPan]      = useState({ x: 0, y: 0 });
+  const [showMasks, setShowMasks] = useState(true);
+  const [panning,  setPanning]  = useState(false);
+  const panStart   = useRef(null);
 
   // ===== POLYGON DRAWING =====
   const [naturalPts, setNaturalPts] = useState([]);
@@ -52,6 +52,8 @@ export default function App() {
     setNaturalPts([]);
     setDrawMode(false);
     setHasSaved(false);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
   };
 
   // ================= ANALYZE =================
@@ -140,10 +142,34 @@ export default function App() {
     const margin = 20;
     const usable = W - margin * 2;
     let   y      = margin;
+    let   page   = 1;
 
+    const addFooter = () => {
+      pdf.setFillColor(15, 40, 25);
+      pdf.rect(0, 282, 210, 15, "F");
+      pdf.setFontSize(8);
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(120, 180, 150);
+      pdf.text("This report is AI-assisted and should be reviewed by a licensed dental professional.", margin, 291);
+      pdf.text(`Page ${page}`, W - margin, 291, { align: "right" });
+    };
+
+    const checkPageBreak = (neededSpace = 20) => {
+      if (y + neededSpace > 275) {
+        addFooter();
+        pdf.addPage();
+        page++;
+        pdf.setFillColor(255, 255, 255);
+        pdf.rect(0, 0, 210, 297, "F");
+        y = margin;
+      }
+    };
+
+    // ── WHITE BACKGROUND ─────────────────────────────────
     pdf.setFillColor(255, 255, 255);
     pdf.rect(0, 0, 210, 297, "F");
 
+    // ── HEADER BAR ───────────────────────────────────────
     pdf.setFillColor(15, 40, 25);
     pdf.rect(0, 0, 210, 28, "F");
     pdf.setFontSize(16);
@@ -157,6 +183,7 @@ export default function App() {
     pdf.text("AI-Assisted Dental Diagnostic System", W - margin, 20, { align: "right" });
     y = 36;
 
+    // ── X-RAY IMAGE ──────────────────────────────────────
     try {
       const imgEl  = document.querySelector(".report-image");
       const imgSrc = imgEl.src;
@@ -167,6 +194,7 @@ export default function App() {
         reader.readAsDataURL(blob);
       });
       const imgH = Math.round((imgEl.naturalHeight / imgEl.naturalWidth) * usable);
+      checkPageBreak(imgH + 14);
       pdf.addImage(imgData, "JPEG", margin, y, usable, imgH);
       y += imgH + 6;
       pdf.setFontSize(8);
@@ -179,11 +207,15 @@ export default function App() {
       y += 4;
     }
 
+    // ── DIVIDER ──────────────────────────────────────────
+    checkPageBreak(10);
     pdf.setDrawColor("#dddddd");
     pdf.setLineWidth(0.3);
     pdf.line(margin, y, W - margin, y);
     y += 5;
 
+    // ── FINDINGS TABLE ───────────────────────────────────
+    checkPageBreak(20);
     pdf.setFontSize(11);
     pdf.setFont("helvetica", "bold");
     pdf.setTextColor(15, 40, 25);
@@ -204,7 +236,7 @@ export default function App() {
     y += 4;
 
     detections.forEach((d, i) => {
-      if (y > 265) { pdf.addPage(); y = margin; }
+      checkPageBreak(10);
       if (i % 2 === 0) {
         pdf.setFillColor(250, 252, 251);
         pdf.rect(margin, y - 3.5, usable, 7, "F");
@@ -212,19 +244,22 @@ export default function App() {
       pdf.setFontSize(9);
       pdf.setFont("helvetica", "normal");
       pdf.setTextColor(30, 30, 30);
-      pdf.text(String(i + 1),             margin + 2,   y);
-      pdf.text(d.class_name,              margin + 12,  y);
+      pdf.text(String(i + 1),  margin + 2,   y);
+      pdf.text(d.class_name,   margin + 12,  y);
       pdf.text(d.confidence != null ? (d.confidence * 100).toFixed(1) + "%" : "—", margin + 90, y);
       pdf.text(d.isManual ? "Manual" : "AI", margin + 130, y);
       y += 7;
     });
 
     y += 4;
+    checkPageBreak(10);
     pdf.setDrawColor("#dddddd");
     pdf.line(margin, y, W - margin, y);
     y += 5;
 
+    // ── DIAGNOSIS ────────────────────────────────────────
     if (reportData?.diagnosis) {
+      checkPageBreak(20);
       pdf.setFontSize(11);
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(15, 40, 25);
@@ -234,15 +269,22 @@ export default function App() {
       pdf.setFont("helvetica", "normal");
       pdf.setTextColor(40, 40, 40);
       const diagLines = pdf.splitTextToSize(reportData.diagnosis, usable);
-      pdf.text(diagLines, margin, y);
-      y += diagLines.length * 5 + 6;
+      diagLines.forEach((line) => {
+        checkPageBreak(6);
+        pdf.text(line, margin, y);
+        y += 5;
+      });
+      y += 4;
     }
 
+    checkPageBreak(10);
     pdf.setDrawColor("#dddddd");
     pdf.line(margin, y, W - margin, y);
     y += 5;
 
+    // ── TREATMENT PLAN ───────────────────────────────────
     if (reportData?.treatment_plan) {
+      checkPageBreak(20);
       pdf.setFontSize(11);
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(15, 40, 25);
@@ -252,65 +294,105 @@ export default function App() {
       pdf.setFont("helvetica", "normal");
       pdf.setTextColor(40, 40, 40);
       const planLines = pdf.splitTextToSize(reportData.treatment_plan, usable);
-      pdf.text(planLines, margin, y);
+      planLines.forEach((line) => {
+        checkPageBreak(6);
+        pdf.text(line, margin, y);
+        y += 5;
+      });
     }
 
-    pdf.setFillColor(15, 40, 25);
-    pdf.rect(0, 282, 210, 15, "F");
-    pdf.setFontSize(8);
-    pdf.setFont("helvetica", "normal");
-    pdf.setTextColor(120, 180, 150);
-    pdf.text("This report is AI-assisted and should be reviewed by a licensed dental professional.", margin, 291);
-    pdf.text("Page 1", W - margin, 291, { align: "right" });
+    // ── FOOTER on last page ───────────────────────────────
+    addFooter();
 
     pdf.save("Dental_Report.pdf");
   };
 
+  // ================= ZOOM / PAN HANDLERS =================
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    setZoom(prev => Math.min(Math.max(prev * delta, 1), 6));
+  }, []);
+
+  const handleMouseDown = useCallback((e) => {
+    if (drawMode) return;
+    setPanning(true);
+    panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+  }, [drawMode, pan]);
+
+  const handleMouseMove = useCallback((e) => {
+  if (!panning || drawMode) return;
+  const wrap = wrapRef.current;
+  if (!wrap) return;
+
+  const wRect  = wrap.getBoundingClientRect();
+  const maxPanX = (wRect.width  * (zoom - 1)) / 2;
+  const maxPanY = (wRect.height * (zoom - 1)) / 2;
+
+  const newX = e.clientX - panStart.current.x;
+  const newY = e.clientY - panStart.current.y;
+
+  setPan({
+    x: Math.min(Math.max(newX, -maxPanX), maxPanX),
+    y: Math.min(Math.max(newY, -maxPanY), maxPanY),
+  });
+  }, [panning, drawMode, zoom]);
+
+  const handleMouseUp = useCallback(() => setPanning(false), []);
+
+  // Attach wheel with passive:false so we can preventDefault
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      setZoom(prev => Math.min(Math.max(prev * delta, 1), 6));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [imageLoaded]);
+
   // ================= POLYGON DRAW =================
-  // FIX: use e.currentTarget (the SVG) for the rect, not the img
-  // This ensures coordinates are always aligned regardless of layout
   const handleSvgClick = useCallback((e) => {
-  if (!drawMode || !imageRef.current) return;
-  e.stopPropagation();
+    if (!drawMode || !imageRef.current) return;
+    e.stopPropagation();
 
-  const img     = imageRef.current;
-  const svg     = e.currentTarget;
-  const svgRect = svg.getBoundingClientRect();
+    const img     = imageRef.current;
+    const svg     = e.currentTarget;
+    const svgRect = svg.getBoundingClientRect();
 
-  const natW = img.naturalWidth;
-  const natH = img.naturalHeight;
+    const natW = img.naturalWidth;
+    const natH = img.naturalHeight;
 
-  // Compute how the image is letterboxed inside the SVG
-  const svgAspect = svgRect.width  / svgRect.height;
-  const imgAspect = natW / natH;
+    const svgAspect = svgRect.width  / svgRect.height;
+    const imgAspect = natW / natH;
 
-  let renderW, renderH, offsetX, offsetY;
+    let renderW, renderH, offsetX, offsetY;
 
-  if (imgAspect > svgAspect) {
-    // image is wider — pillarboxed top/bottom
-    renderW = svgRect.width;
-    renderH = svgRect.width / imgAspect;
-    offsetX = 0;
-    offsetY = (svgRect.height - renderH) / 2;
-  } else {
-    // image is taller — letterboxed left/right
-    renderH = svgRect.height;
-    renderW = svgRect.height * imgAspect;
-    offsetX = (svgRect.width - renderW) / 2;
-    offsetY = 0;
-  }
+    if (imgAspect > svgAspect) {
+      renderW = svgRect.width;
+      renderH = svgRect.width / imgAspect;
+      offsetX = 0;
+      offsetY = (svgRect.height - renderH) / 2;
+    } else {
+      renderH = svgRect.height;
+      renderW = svgRect.height * imgAspect;
+      offsetX = (svgRect.width - renderW) / 2;
+      offsetY = 0;
+    }
 
-  const sx = e.clientX - svgRect.left  - offsetX;
-  const sy = e.clientY - svgRect.top   - offsetY;
+    const sx = e.clientX - svgRect.left  - offsetX;
+    const sy = e.clientY - svgRect.top   - offsetY;
 
-  // clamp to image bounds
-  if (sx < 0 || sy < 0 || sx > renderW || sy > renderH) return;
+    if (sx < 0 || sy < 0 || sx > renderW || sy > renderH) return;
 
-  const nx = (sx / renderW) * natW;
-  const ny = (sy / renderH) * natH;
+    const nx = (sx / renderW) * natW;
+    const ny = (sy / renderH) * natH;
 
-  setNaturalPts((prev) => [...prev, [nx, ny]]);
-}, [drawMode]);
+    setNaturalPts((prev) => [...prev, [nx, ny]]);
+  }, [drawMode]);
 
   const finishPolygon = useCallback(() => {
     if (naturalPts.length < 3) return;
@@ -412,6 +494,43 @@ export default function App() {
                   </button>
                 )}
 
+                {analyzed && (
+                  <button
+                    className={`Btn ${!showMasks ? "Btn--drawing" : ""}`}
+                    onClick={() => setShowMasks(prev => !prev)}
+                  >
+                    <div className="sign">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        {showMasks ? (
+                          <>
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                          </>
+                        ) : (
+                          <>
+                            <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/>
+                            <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                          </>
+                        )}
+                      </svg>
+                    </div>
+                    <div className="text">{showMasks ? "Hide" : "Show"}</div>
+                  </button>
+                )}
+
+                {/* Reset zoom button — only shown when zoomed in */}
+                {zoom > 1 && (
+                  <button className="Btn" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>
+                    <div className="sign">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                      </svg>
+                    </div>
+                    <div className="text">Reset</div>
+                  </button>
+                )}
+
                 <button
                   className="Btn"
                   onClick={() => {
@@ -427,6 +546,8 @@ export default function App() {
                     setSaveStatus(null);
                     setReportData(null);
                     setImageId(null);
+                    setZoom(1);
+                    setPan({ x: 0, y: 0 });
                     fileInputRef.current.click();
                   }}
                 >
@@ -454,74 +575,106 @@ export default function App() {
                 </div>
               )}
 
+              {/* Zoom hint */}
+              {!drawMode && zoom === 1 && analyzed && (
+                <div className="draw-hint-bar" style={{ justifyContent: "center" }}>
+                  <span>🔍 Scroll to zoom · Drag to pan</span>
+                </div>
+              )}
+
               {/* Image + overlay */}
-              <div className="xray-wrap">
-                <img
-                  ref={imageRef}
-                  src={imageURL}
-                  alt="xray"
-                  className="xray-image"
-                  onLoad={() => setImageLoaded(true)}
-                  draggable={false}
-                />
+              <div
+                className="xray-wrap"
+                ref={wrapRef}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                style={{
+                  overflow: "hidden",
+                  cursor: drawMode ? "crosshair" : panning ? "grabbing" : zoom > 1 ? "grab" : "default",
+                }}
+              >
+                {/* Zoomable inner container */}
+                <div style={{
+                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                  transformOrigin: "center center",
+                  width: "100%",
+                  height: "100%",
+                  willChange: "transform",
+                }}>
+                  <img
+                    ref={imageRef}
+                    src={imageURL}
+                    alt="xray"
+                    className="xray-image"
+                    onLoad={() => setImageLoaded(true)}
+                    draggable={false}
+                  />
 
-                {/* SCANNING ANIMATION */}
-                {analyzing && (
-                  <div className="scan-overlay">
-                    <div className="scan-line" />
-                    <div className="scan-text">Analyzing X-ray…</div>
-                  </div>
-                )}
+                  {/* SCANNING ANIMATION */}
+                  {analyzing && (
+                    <div className="scan-overlay">
+                      <div className="scan-line" />
+                      <div className="scan-text">Analyzing X-ray…</div>
+                    </div>
+                  )}
 
-                {analyzed && imageLoaded && imageRef.current && (
-                  <svg
-                    className="overlay"
-                    viewBox={`0 0 ${imageRef.current.naturalWidth} ${imageRef.current.naturalHeight}`}
-                    preserveAspectRatio="xMidYMid meet"
-                    style={{ cursor: drawMode ? "crosshair" : "default" }}
-                    onClick={handleSvgClick}
-                    onDoubleClick={(e) => { e.stopPropagation(); finishPolygon(); }}
-                  >
-                    {detections.map((d) => (
-                      <g
-                        key={d.id}
-                        onClick={(e) => { if (!drawMode) { e.stopPropagation(); setSelected(d); } }}
-                        style={{ cursor: drawMode ? "crosshair" : "pointer" }}
-                      >
-                        <polygon
-                          points={d.mask?.map(([x, y]) => `${x},${y}`).join(" ")}
-                          className={`mask ${selected?.id === d.id ? "active" : ""} ${d.isManual ? "mask--manual" : ""}`}
-                        />
-                      </g>
-                    ))}
-
-                    {drawMode && naturalPts.length > 0 && (
-                      <>
-                        <polyline
-                          points={naturalPts.map(([x, y]) => `${x},${y}`).join(" ")}
-                          fill="none"
-                          stroke="yellow"
-                          strokeWidth="3"
-                          strokeDasharray="8 4"
-                        />
-                        {naturalPts.map(([x, y], i) => (
-                          <circle key={i} cx={x} cy={y} r="6" fill="yellow" stroke="white" strokeWidth="2"/>
-                        ))}
-                        {naturalPts.length >= 3 && (
-                          <line
-                            x1={naturalPts[naturalPts.length - 1][0]}
-                            y1={naturalPts[naturalPts.length - 1][1]}
-                            x2={naturalPts[0][0]}
-                            y2={naturalPts[0][1]}
-                            stroke="yellow"
-                            strokeWidth="2"
-                            strokeDasharray="4 4"
-                            opacity="0.45"
+                  {analyzed && imageLoaded && imageRef.current && (
+                    <svg
+                      className="overlay"
+                      viewBox={`0 0 ${imageRef.current.naturalWidth} ${imageRef.current.naturalHeight}`}
+                      preserveAspectRatio="xMidYMid meet"
+                      style={{ cursor: drawMode ? "crosshair" : "default" }}
+                      onClick={handleSvgClick}
+                      onDoubleClick={(e) => { e.stopPropagation(); finishPolygon(); }}
+                    >
+                      {showMasks && detections.map((d) => (
+                        <g
+                          key={d.id}
+                          onClick={(e) => { if (!drawMode) { e.stopPropagation(); setSelected(d); } }}
+                          style={{ cursor: drawMode ? "crosshair" : "pointer" }}
+                        >
+                          <polygon
+                            points={d.mask?.map(([x, y]) => `${x},${y}`).join(" ")}
+                            className={`mask ${selected?.id === d.id ? "active" : ""} ${d.isManual ? "mask--manual" : ""}`}
                           />
-                        )}
-                      </>
-                    )}
-                  </svg>
+                        </g>
+                      ))}
+
+                      {drawMode && naturalPts.length > 0 && (
+                        <>
+                          <polyline
+                            points={naturalPts.map(([x, y]) => `${x},${y}`).join(" ")}
+                            fill="none"
+                            stroke="yellow"
+                            strokeWidth="3"
+                            strokeDasharray="8 4"
+                          />
+                          {naturalPts.map(([x, y], i) => (
+                            <circle key={i} cx={x} cy={y} r="6" fill="yellow" stroke="white" strokeWidth="2"/>
+                          ))}
+                          {naturalPts.length >= 3 && (
+                            <line
+                              x1={naturalPts[naturalPts.length - 1][0]}
+                              y1={naturalPts[naturalPts.length - 1][1]}
+                              x2={naturalPts[0][0]}
+                              y2={naturalPts[0][1]}
+                              stroke="yellow"
+                              strokeWidth="2"
+                              strokeDasharray="4 4"
+                              opacity="0.45"
+                            />
+                          )}
+                        </>
+                      )}
+                    </svg>
+                  )}
+                </div>
+
+                {/* Zoom level indicator */}
+                {zoom > 1 && (
+                  <div className="zoom-badge">{Math.round(zoom * 100)}%</div>
                 )}
               </div>
             </>
@@ -532,7 +685,8 @@ export default function App() {
         {analyzed && (
           <div className="panel">
             <h2>Findings ({detections.length})</h2>
-
+            
+            <div className="finding-list">
             {detections.map((d) => (
               <div
                 key={d.id}
@@ -560,6 +714,9 @@ export default function App() {
                 </div>
               </div>
             ))}
+            </div>
+
+            <div className="panel-footer">
 
             <button
               className={`save-status-btn${saveStatus === "saved" ? " saved" : ""}${saveStatus === "error" ? " error" : ""}`}
@@ -585,6 +742,7 @@ export default function App() {
               </>
             )}
           </div>
+        </div>
         )}
 
         {/* REPORT MODAL */}
